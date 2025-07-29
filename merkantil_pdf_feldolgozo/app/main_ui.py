@@ -1,3 +1,4 @@
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QFileDialog, QMessageBox, QLabel
 from .processor import run
 from .viewer import CSVViewer
@@ -10,6 +11,7 @@ class MainUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PDF Autóköltség Feldolgozó")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "otp_icon.png")))
         self.resize(320, 160)
 
         layout = QVBoxLayout()

@@ -2,6 +2,7 @@ import sys
 import os
 import csv
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox,
     QTableWidget, QTableWidgetItem, QHeaderView
@@ -32,6 +33,7 @@ class CofanetHelpUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cofanet Help")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "coface_icon.png")))
         self.selected_file = None
 
         layout = QVBoxLayout()

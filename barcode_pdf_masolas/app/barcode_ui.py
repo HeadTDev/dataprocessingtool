@@ -1,3 +1,5 @@
+import os
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
     QVBoxLayout, QHBoxLayout, QMessageBox
@@ -10,6 +12,7 @@ class BarcodeCopierWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Vonalkód alapú PDF másoló")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "pdf_icon.png")))
 
         self.excel_path_input = QLineEdit()
         self.excel_browse_btn = QPushButton("📂 Tallózás")

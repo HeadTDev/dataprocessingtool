@@ -18,9 +18,9 @@ class MainMenu(QWidget):
         layout.addWidget(QLabel("Válassz egy alkalmazást:"))
 
         buttons = [
-            ("Merkantil PDF Feldolgozó", "merkantil_pdf_feldolgozo/run.py"),
-            ("Vonalkód PDF Másolás", "barcode_pdf_masolas/run.py"),
-            ("Cofanet Help", "cofanet_help/run.py")
+            ("💸 Merkantil PDF Feldolgozó", "merkantil_pdf_feldolgozo/run.py"),
+            ("📂 Vonalkód PDF Másolás", "barcode_pdf_masolas/run.py"),
+            ("📚 Cofanet Help", "cofanet_help/run.py")
         ]
 
         for text, path in buttons:
