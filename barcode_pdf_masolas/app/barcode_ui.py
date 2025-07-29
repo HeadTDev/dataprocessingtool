@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
     QVBoxLayout, QHBoxLayout, QMessageBox
 )
-from barcode_copier import copy_matching_pdfs
+from app.barcode_copier import copy_matching_pdfs
 
 BUTTON_SIZE = (500, 40)
 

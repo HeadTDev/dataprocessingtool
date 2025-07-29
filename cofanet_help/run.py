@@ -1,6 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication
-from app.main_ui import CofanetHelpUI  # vagy ami az ablakod
+from app.main_ui import CofanetHelpUI
 
 def main():
     app = QApplication(sys.argv)

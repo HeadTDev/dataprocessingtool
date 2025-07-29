@@ -1,6 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication
-from barcode_ui import BarcodeCopierWindow
+from app.barcode_ui import BarcodeCopierWindow
 
 def main():
     app = QApplication(sys.argv)
