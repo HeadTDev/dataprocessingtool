@@ -1,9 +1,12 @@
+import sys
 from PySide6.QtWidgets import QApplication
 from barcode_ui import BarcodeCopierWindow
-import sys
 
-if __name__ == "__main__":
+def main():
     app = QApplication(sys.argv)
     window = BarcodeCopierWindow()
     window.show()
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

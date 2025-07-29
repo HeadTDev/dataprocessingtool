@@ -1,8 +1,7 @@
 import sys
 import subprocess
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QSizePolicy
+from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel
 
-# Állítható gombméret (szélesség, magasság)
 BUTTON_SIZE = (300, 40)
 
 class MainMenu(QWidget):
@@ -14,35 +13,21 @@ class MainMenu(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.addWidget(QLabel("Válassz egy alkalmazást:"))
 
-        label = QLabel("Válassz egy alkalmazást:")
-        layout.addWidget(label)
+        buttons = [
+            ("Merkantil PDF Feldolgozó", "merkantil_pdf_feldolgozo/run.py"),
+            ("Vonalkód PDF Másolás", "barcode_pdf_masolas/run.py"),
+            ("Cofanet Help", "cofanet_help/run.py")
+        ]
 
-        self.pdf_button = QPushButton("Merkantil PDF Feldolgozó")
-        self.pdf_button.setFixedSize(*BUTTON_SIZE)
-        layout.addWidget(self.pdf_button)
-        self.pdf_button.clicked.connect(self.launch_pdf_feldolgozo)
-
-        self.barcode_button = QPushButton("Vonalkód PDF Másolás")
-        self.barcode_button.setFixedSize(*BUTTON_SIZE)
-        layout.addWidget(self.barcode_button)
-        self.barcode_button.clicked.connect(self.launch_barcode_pdf_masolas)
-
-        self.cofanet_button = QPushButton("Cofanet Help")
-        self.cofanet_button.setFixedSize(*BUTTON_SIZE)
-        layout.addWidget(self.cofanet_button)
-        self.cofanet_button.clicked.connect(self.launch_cofanet_help)
+        for text, path in buttons:
+            btn = QPushButton(text)
+            btn.setFixedSize(*BUTTON_SIZE)
+            btn.clicked.connect(lambda _, p=path: subprocess.Popen([sys.executable, p]))
+            layout.addWidget(btn)
 
         self.setLayout(layout)
-
-    def launch_pdf_feldolgozo(self):
-        subprocess.Popen([sys.executable, "merkantil_pdf_feldolgozo/run.py"])
-
-    def launch_barcode_pdf_masolas(self):
-        subprocess.Popen([sys.executable, "barcode_pdf_masolas/run.py"])
-
-    def launch_cofanet_help(self):
-        subprocess.Popen([sys.executable, "cofanet_help/run.py"])
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

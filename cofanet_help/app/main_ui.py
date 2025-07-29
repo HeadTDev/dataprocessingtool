@@ -93,10 +93,3 @@ class CofanetHelpUI(QWidget):
     def show_results_table(self, data, headers):
         self.results_window = ResultsTable(data, headers)
         self.results_window.show()
-
-def run_app():
-    app = QApplication(sys.argv)
-    window = CofanetHelpUI()
-    window.resize(320, 160)
-    window.show()
-    sys.exit(app.exec())
