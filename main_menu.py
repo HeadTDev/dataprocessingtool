@@ -1,5 +1,6 @@
 import sys
 import subprocess
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel
 
 BUTTON_SIZE = (300, 40)
@@ -8,6 +9,7 @@ class MainMenu(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Főmenü")
+        self.setWindowIcon(QIcon("synthwave_icon.png"))
         self.setMinimumSize(320, 160)
         self.init_ui()
 
