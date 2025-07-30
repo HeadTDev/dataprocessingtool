@@ -1,6 +1,38 @@
 import re
 
-def extract_invoice_data_from_unicode_text(filename):
+def normalize_amount(amount_str):
+    amount_str = amount_str.replace('.', '')
+    amount_str = amount_str.replace(',', '.')
+    amount_str = amount_str.replace(' ', '')
+    return amount_str
+
+def format_hu_number(amount):
+    """
+    Formázza az összeget magyar pénzügyi formátum szerint (ezres: pont, tizedes: vessző).
+    Pl. 12345.67 -> '12.345,67'
+    Ha nem szám, visszaadja, ami jött.
+    """
+    try:
+        amt = float(amount)
+        return f"{amt:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return str(amount)
+
+def convert_to_huf(amount_str, currency, eur_rate):
+    amount_str = normalize_amount(amount_str)
+    try:
+        amount = float(amount_str)
+    except Exception:
+        return ""
+    if currency == "EUR":
+        rate = eur_rate
+    elif currency == "HUF":
+        rate = 1
+    else:
+        return ""
+    return round(amount * rate, 2)
+
+def extract_invoice_data_from_unicode_text(filename, eur_rate: float = 400.00):
     result = []
     vevo_nev = None
     encodings = ['utf-16', 'utf-8']
@@ -24,13 +56,18 @@ def extract_invoice_data_from_unicode_text(filename):
                             bp_penznem = adatok_match.group(2).strip()
                             osszeg_sp = adatok_match.group(3).strip()
                             sp_penznem = adatok_match.group(4).strip()
+                            atvaltva_huf = (
+                                convert_to_huf(osszeg_bp, bp_penznem, eur_rate)
+                                if bp_penznem != "HUF" else normalize_amount(osszeg_bp)
+                            )
                             result.append([
                                 vevo_nev,
                                 szamla_szam,
-                                osszeg_bp,
+                                format_hu_number(normalize_amount(osszeg_bp)),
                                 bp_penznem,
-                                osszeg_sp,
-                                sp_penznem
+                                format_hu_number(normalize_amount(osszeg_sp)),
+                                sp_penznem,
+                                format_hu_number(atvaltva_huf)
                             ])
                         else:
                             parts = re.split(r'\t|;', line)
@@ -50,14 +87,19 @@ def extract_invoice_data_from_unicode_text(filename):
                                         elif not osszeg_sp:
                                             osszeg_sp = val.replace('"', '').strip()
                                             sp_penznem = next_val
+                            atvaltva_huf = (
+                                convert_to_huf(osszeg_bp, bp_penznem, eur_rate)
+                                if bp_penznem != "HUF" else normalize_amount(osszeg_bp)
+                            )
                             if szamla_szam and (osszeg_bp or osszeg_sp):
                                 result.append([
                                     vevo_nev,
                                     szamla_szam,
-                                    osszeg_bp,
+                                    format_hu_number(normalize_amount(osszeg_bp)),
                                     bp_penznem,
-                                    osszeg_sp,
-                                    sp_penznem
+                                    format_hu_number(normalize_amount(osszeg_sp)),
+                                    sp_penznem,
+                                    format_hu_number(atvaltva_huf)
                                 ])
             break
         except Exception:

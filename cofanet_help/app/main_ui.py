@@ -5,7 +5,7 @@ import csv
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox,
-    QTableWidget, QTableWidgetItem, QHeaderView
+    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit
 )
 
 from .extract_data import extract_invoice_data_from_unicode_text
@@ -28,20 +28,28 @@ class ResultsTable(QWidget):
         table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(table)
         self.setLayout(layout)
-        self.resize(700, 400)
+        self.resize(800, 400)  # Kis szélesség növelés az új oszlop miatt
 
 class CofanetHelpUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cofanet Help")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "coface_icon.png")))
-        self.resize(320, 160)
+        self.resize(320, 200)
 
         self.selected_file = None
 
         layout = QVBoxLayout()
         self.label = QLabel("Válaszd ki az SAP export (.xls, .txt, .csv) input fájlt!")
         layout.addWidget(self.label)
+
+        # EUR árfolyam mező
+        self.eur_label = QLabel("EUR árfolyam:")
+        layout.addWidget(self.eur_label)
+        self.eur_input = QLineEdit()
+        self.eur_input.setPlaceholderText("Pl. 400")
+        self.eur_input.setFixedSize(100, 30)
+        layout.addWidget(self.eur_input)
 
         self.browse_button = QPushButton("📂 Tallózás (SAP)")
         self.browse_button.setFixedSize(*BUTTON_SIZE)
@@ -71,15 +79,30 @@ class CofanetHelpUI(QWidget):
             QMessageBox.warning(self, "Hiba", "Először válassz ki egy input fájlt!")
             return
 
+        # EUR árfolyam beolvasása
+        try:
+            eur_rate = float(self.eur_input.text().replace(',', '.').strip())
+        except Exception:
+            QMessageBox.warning(self, "Hiba", "Kérlek, érvényes EUR árfolyamot adj meg (pl. 400)!")
+            return
+
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, "output")
         os.makedirs(output_dir, exist_ok=True)
 
         try:
-            invoice_rows = extract_invoice_data_from_unicode_text(self.selected_file)
+            invoice_rows = extract_invoice_data_from_unicode_text(self.selected_file, eur_rate)
             invoice_rows_sorted = sorted(invoice_rows, key=lambda row: (row[0] or "").lower())
             output_path = os.path.join(output_dir, "vevok.csv")
-            headers = ["Vevő", "Számla", "Összeg BP-ben", "BP pénznem", "Összeg SP-ben", "SP pénznem"]
+            headers = [
+                "Vevő",
+                "Számla",
+                "Összeg BP-ben",
+                "BP pénznem",
+                "Összeg SP-ben",
+                "SP pénznem",
+                "Átváltva HUF"
+            ]
             with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(headers)
