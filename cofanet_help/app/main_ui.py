@@ -5,7 +5,7 @@ import csv
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox,
-    QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit
+    QTableWidget, QTableWidgetItem, QLineEdit
 )
 
 from .extract_data import extract_invoice_data_from_unicode_text
@@ -16,10 +16,8 @@ class ResultsTable(QWidget):
     def __init__(self, data, headers):
         super().__init__()
         self.setWindowTitle("Feldolgozott vevő adatok")
-        layout = QVBoxLayout()
-        table = QTableWidget()
-        table.setRowCount(len(data))
-        table.setColumnCount(len(headers))
+        layout = QVBoxLayout(self)
+        table = QTableWidget(len(data), len(headers))
         table.setHorizontalHeaderLabels(headers)
         for row_idx, row in enumerate(data):
             for col_idx, item in enumerate(row):
@@ -27,8 +25,7 @@ class ResultsTable(QWidget):
         table.resizeColumnsToContents()
         table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(table)
-        self.setLayout(layout)
-        self.resize(800, 400)  # Kis szélesség növelés az új oszlop miatt
+        self.resize(800, 400)
 
 class CofanetHelpUI(QWidget):
     def __init__(self):
@@ -39,29 +36,27 @@ class CofanetHelpUI(QWidget):
 
         self.selected_file = None
 
-        layout = QVBoxLayout()
-        self.label = QLabel("Válaszd ki az SAP export (.xls, .txt, .csv) input fájlt!")
-        layout.addWidget(self.label)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Válaszd ki az SAP export (.xls, .txt, .csv) input fájlt!"))
 
-        # EUR árfolyam mező
-        self.eur_label = QLabel("EUR árfolyam:")
-        layout.addWidget(self.eur_label)
+        eur_layout = QVBoxLayout()
+        eur_label = QLabel("EUR árfolyam:")
         self.eur_input = QLineEdit()
         self.eur_input.setPlaceholderText("Pl. 400")
         self.eur_input.setFixedSize(100, 30)
-        layout.addWidget(self.eur_input)
+        eur_layout.addWidget(eur_label)
+        eur_layout.addWidget(self.eur_input)
+        layout.addLayout(eur_layout)
 
-        self.browse_button = QPushButton("📂 Tallózás (SAP)")
-        self.browse_button.setFixedSize(*BUTTON_SIZE)
-        self.browse_button.clicked.connect(self.browse_file)
-        layout.addWidget(self.browse_button)
+        browse_btn = QPushButton("📂 Tallózás (SAP)")
+        browse_btn.setFixedSize(*BUTTON_SIZE)
+        browse_btn.clicked.connect(self.browse_file)
+        layout.addWidget(browse_btn)
 
-        self.process_button = QPushButton("⚙️ Feldolgozás")
-        self.process_button.setFixedSize(*BUTTON_SIZE)
-        self.process_button.clicked.connect(self.process_file)
-        layout.addWidget(self.process_button)
-
-        self.setLayout(layout)
+        process_btn = QPushButton("⚙️ Feldolgozás")
+        process_btn.setFixedSize(*BUTTON_SIZE)
+        process_btn.clicked.connect(self.process_file)
+        layout.addWidget(process_btn)
 
     def browse_file(self):
         file_dialog = QFileDialog(self)
@@ -79,15 +74,13 @@ class CofanetHelpUI(QWidget):
             QMessageBox.warning(self, "Hiba", "Először válassz ki egy input fájlt!")
             return
 
-        # EUR árfolyam beolvasása
         try:
             eur_rate = float(self.eur_input.text().replace(',', '.').strip())
         except Exception:
             QMessageBox.warning(self, "Hiba", "Kérlek, érvényes EUR árfolyamot adj meg (pl. 400)!")
             return
 
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(project_root, "output")
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
         os.makedirs(output_dir, exist_ok=True)
 
         try:
@@ -106,8 +99,7 @@ class CofanetHelpUI(QWidget):
             with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(headers)
-                for row in invoice_rows_sorted:
-                    writer.writerow(row)
+                writer.writerows(invoice_rows_sorted)
             QMessageBox.information(
                 self,
                 "Sikeres feldolgozás",
