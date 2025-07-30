@@ -35,7 +35,7 @@ class CofanetHelpUI(QWidget):
         super().__init__()
         self.setWindowTitle("Cofanet Help")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "coface_icon.png")))
-        self.resize(320, 160)  # Azonos méret
+        self.resize(320, 160)
 
         self.selected_file = None
 

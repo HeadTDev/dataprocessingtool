@@ -3,13 +3,11 @@ import shutil
 import pandas as pd
 
 def copy_matching_pdfs(excel_path, pdf_folder, output_folder):
-    # Excel beolvasása
     df = pd.read_excel(excel_path)
 
     if "Szöveg" not in df.columns:
         raise ValueError("A kiválasztott Excel fájl nem tartalmaz 'Szöveg' nevű oszlopot.")
 
-    # Első 10 karakter kiszedése a 'Szöveg' oszlopból
     df["Vonalkód"] = df["Szöveg"].astype(str).str[:10]
     barcodes = set(df["Vonalkód"].dropna())
 

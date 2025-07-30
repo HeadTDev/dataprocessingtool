@@ -1,5 +1,3 @@
-# app/processor.py
-
 import csv, re
 from PyPDF2 import PdfReader
 from collections import defaultdict

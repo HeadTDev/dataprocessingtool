@@ -4,7 +4,6 @@ from .processor import run
 from .viewer import CSVViewer
 import os
 
-# Könnyen állítható gombméret (szélesség, magasság)
 BUTTON_SIZE = (300, 40)
 
 class MainUI(QWidget):
