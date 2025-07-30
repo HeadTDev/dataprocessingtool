@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from .extract_data import extract_invoice_data_from_unicode_text
+
 BUTTON_SIZE = (300, 40)
 
 class ResultsTable(QWidget):
@@ -34,13 +35,15 @@ class CofanetHelpUI(QWidget):
         super().__init__()
         self.setWindowTitle("Cofanet Help")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "coface_icon.png")))
+        self.resize(320, 160)  # Azonos méret
+
         self.selected_file = None
 
         layout = QVBoxLayout()
         self.label = QLabel("Válaszd ki az SAP export (.xls, .txt, .csv) input fájlt!")
         layout.addWidget(self.label)
 
-        self.browse_button = QPushButton("📂 Tallózás")
+        self.browse_button = QPushButton("📂 Tallózás (SAP)")
         self.browse_button.setFixedSize(*BUTTON_SIZE)
         self.browse_button.clicked.connect(self.browse_file)
         layout.addWidget(self.browse_button)
@@ -50,8 +53,6 @@ class CofanetHelpUI(QWidget):
         self.process_button.clicked.connect(self.process_file)
         layout.addWidget(self.process_button)
 
-        self.result_label = QLabel("")
-        layout.addWidget(self.result_label)
         self.setLayout(layout)
 
     def browse_file(self):
@@ -63,14 +64,13 @@ class CofanetHelpUI(QWidget):
             if selected_files:
                 self.selected_file = selected_files[0]
                 filename = os.path.basename(self.selected_file)
-                self.label.setText(f"Kiválasztott fájl: {filename}")
+                QMessageBox.information(self, "Fájl kiválasztva", f"Kiválasztott fájl:\n{filename}")
 
     def process_file(self):
         if not self.selected_file:
             QMessageBox.warning(self, "Hiba", "Először válassz ki egy input fájlt!")
             return
 
-        # Az output mappa a projekt gyökérben van (az app mappával egy szinten)
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(project_root, "output")
         os.makedirs(output_dir, exist_ok=True)
@@ -85,7 +85,9 @@ class CofanetHelpUI(QWidget):
                 writer.writerow(headers)
                 for row in invoice_rows_sorted:
                     writer.writerow(row)
-            self.result_label.setText(
+            QMessageBox.information(
+                self,
+                "Sikeres feldolgozás",
                 f"Sikeres feldolgozás! {len(invoice_rows_sorted)} számla sor írva: output/vevok.csv"
             )
             self.show_results_table(invoice_rows_sorted, headers)
