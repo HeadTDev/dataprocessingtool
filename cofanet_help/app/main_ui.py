@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QMessageBox
 )
 from .extract_data import extract_invoice_summary
-from .coface_copy import fill_coface_excel_and_open  # <-- importáljuk a modult
+from .coface_copy import fill_coface_excel_and_open
 
 class CofanetHelpUI(QWidget):
     def __init__(self):
@@ -111,8 +111,12 @@ class CofanetHelpUI(QWidget):
                         row.get("sp_penznem", ""),
                         forintositva_str
                     ])
-            # Coface Excel kitöltése
-            coface_output_path = fill_coface_excel_and_open(coface_excel_path, output_path)
+            # Mentési hely kiválasztása
+            save_path, _ = QFileDialog.getSaveFileName(self, "Mentés kitöltött Coface Excelként", "coface_output.xlsx", "Excel fájlok (*.xlsx)")
+            if not save_path:
+                QMessageBox.information(self, "Mentés megszakítva", "A kitöltött Excel mentése megszakítva lett.")
+                return
+            coface_output_path = fill_coface_excel_and_open(coface_excel_path, output_path, save_path=save_path)
             QMessageBox.information(
                 self,
                 "Sikeres feldolgozás",

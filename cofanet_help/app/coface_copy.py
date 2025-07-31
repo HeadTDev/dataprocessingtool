@@ -76,7 +76,7 @@ def find_row_for_company(vevo_name, coface_names):
             return idx
     return None
 
-def fill_coface_excel_and_open(coface_excel_path, vevok_csv_path):
+def fill_coface_excel_and_open(coface_excel_path, vevok_csv_path, save_path=None):
     with open(vevok_csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         vevok_data = [(row.get("Vevő", "").strip(), row.get("Forintosítva HUF", "")) for row in reader]
@@ -120,7 +120,11 @@ def fill_coface_excel_and_open(coface_excel_path, vevok_csv_path):
                 else:
                     cell.value = amount
 
-    output_path = os.path.join(os.path.dirname(coface_excel_path), "coface_output.xlsx")
+    # --- MENTÉS FELHASZNÁLÓ ÁLTAL VÁLASZTOTT HELYRE ---
+    if save_path is None:
+        output_path = os.path.join(os.path.dirname(coface_excel_path), "coface_output.xlsx")
+    else:
+        output_path = save_path
     wb.save(output_path)
     try:
         if sys.platform.startswith('darwin'):
