@@ -6,8 +6,6 @@ from PySide6.QtWidgets import (
 )
 from app.barcode_copier import copy_matching_pdfs
 
-BUTTON_SIZE = (500, 40)
-
 class BarcodeCopierWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -27,7 +25,7 @@ class BarcodeCopierWindow(QWidget):
         self.output_browse_btn.clicked.connect(self.browse_output_folder)
 
         self.copy_btn = QPushButton("📋 MÁSOL")
-        self.copy_btn.setFixedSize(*BUTTON_SIZE)
+        self.copy_btn.setFixedSize(300, 40)
         self.copy_btn.clicked.connect(self.start_copying)
 
         layout = QVBoxLayout()
@@ -38,7 +36,7 @@ class BarcodeCopierWindow(QWidget):
         layout.addWidget(self.copy_btn)
 
         self.setLayout(layout)
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(320)
 
     def _create_row(self, label_text, input_widget, button_widget):
         row = QHBoxLayout()

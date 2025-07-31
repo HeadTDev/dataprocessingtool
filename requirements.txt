@@ -2,5 +2,3 @@ PySide6
 PyPDF2
 pandas
 openpyxl
-requests
-beautifulsoup4

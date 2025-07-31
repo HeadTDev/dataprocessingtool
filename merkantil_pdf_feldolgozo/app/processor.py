@@ -59,7 +59,7 @@ def get_license_plate(vehicle_name):
     match = re.search(r'\b([A-Z]{4}-\d{3}|[A-Z]{3}-[A-Z0-9]{3,})\b', vehicle_name)
     return match.group(1) if match else vehicle_name.split()[0]
 
-def read_kgthely_mapping(excel_path="Input/autók.xlsx"):
+def read_kgthely_mapping(excel_path):
     df = pd.read_excel(excel_path, dtype=str).fillna("")
     return {str(row["frsz"]).strip(): str(row["Helyes ktghely"]).strip() for _, row in df.iterrows()}
 
@@ -78,9 +78,9 @@ def save_to_csv_with_kgthely(data, output_path, kgthely_dict, round_amounts='No'
 def csv_to_excel(csv_path="Output/output.csv", excel_path="Output/output.xlsx"):
     pd.read_csv(csv_path, dtype=str).to_excel(excel_path, index=False)
 
-def run(pdf_path):
+def run(pdf_path, excel_path):
     text = extract_text_from_pdf(pdf_path)
     vehicles = process_vehicles(text)
-    kgthely = read_kgthely_mapping()
+    kgthely = read_kgthely_mapping(excel_path)
     save_to_csv_with_kgthely(vehicles, "Output/output.csv", kgthely, round_amounts="Yes")
     csv_to_excel("Output/output.csv", "Output/output.xlsx")
