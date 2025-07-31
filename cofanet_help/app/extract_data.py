@@ -1,77 +1,109 @@
 import re
 
-def normalize_amount(amount_str):
-    return amount_str.replace('.', '').replace(',', '.').replace(' ', '')
-
-def format_hu_number(amount):
-    try:
-        amt = float(amount)
-        return f"{amt:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return str(amount)
-
-def convert_to_huf(amount_str, currency, eur_rate):
-    try:
-        amount = float(normalize_amount(amount_str))
-    except Exception:
-        return ""
-    if currency == "EUR":
-        rate = eur_rate
-    elif currency == "HUF":
-        rate = 1
-    else:
-        return ""
-    return round(amount * rate, 2)
-
-def extract_invoice_data_from_unicode_text(filename, eur_rate=400.0):
-    result = []
-    vevo_nev = None
+def extract_invoice_summary(filename):
+    """
+    Csak a 'Név' és minden '** Számla' sort gyűjti ki.
+    Minden '** Számla' sorhoz hozzárendeli a legutóbbi 'Név' értéket,
+    és pontosan kiolvassa az összegeket a sor végéről.
+    A 'praktiker' cégeket összevonja 'Praktiker Kft.' név alá, összegeiket összeadja.
+    """
     encodings = ['utf-16', 'utf-8']
-    szamla_re = re.compile(r"Számla\s*(\d+)")
-    adatok_re = re.compile(r'"([^"]+)"\s*(\w{3})\s*"([^"]+)"\s*(\w{3})')
+    results = []
+    cegnev = None
+
+    nev_re = re.compile(r'^\s*Név\s+(.*)$')
+    szamla_re = re.compile(r'^\s*\*\*\s*Számla\s+(\d+)')
+    # Kifejezetten a sor végéről szedjük az összegeket és pénznemeket!
+    amounts_re = re.compile(r'([\d\.,]+)\s+(HUF|EUR)\s+([\d\.,]+)\s+(HUF|EUR)\s*$')
+
     for encoding in encodings:
         try:
             with open(filename, encoding=encoding) as f:
                 for line in f:
-                    line = line.strip()
-                    if not line:
+                    line = line.rstrip('\n')
+                    m_nev = nev_re.match(line)
+                    if m_nev:
+                        cegnev = m_nev.group(1).strip()
                         continue
-                    if line.startswith("Név"):
-                        vevo_nev = line.replace("Név", "").strip()
-                    if line.lstrip("*").strip().startswith("Számla"):
-                        szamla_match = szamla_re.search(line)
-                        adatok_match = adatok_re.search(line)
-                        if szamla_match and adatok_match:
-                            szamla_szam = szamla_match.group(1)
-                            osszeg_bp, bp_penznem, osszeg_sp, sp_penznem = adatok_match.groups()
+                    m_szamla = szamla_re.match(line)
+                    if m_szamla:
+                        m_amounts = amounts_re.search(line.replace('\t', ' '))
+                        if m_amounts:
+                            osszeg_bp = m_amounts.group(1).strip()
+                            bp_penznem = m_amounts.group(2).strip()
+                            osszeg_sp = m_amounts.group(3).strip()
+                            sp_penznem = m_amounts.group(4).strip()
                         else:
-                            # fallback: split by tab or semicolon
-                            parts = re.split(r'\t|;', line)
-                            szamla_match = szamla_re.search(parts[0]) if parts else None
-                            szamla_szam = szamla_match.group(1) if szamla_match else ''
-                            osszeg_bp = bp_penznem = osszeg_sp = sp_penznem = ''
-                            for i, val in enumerate(parts):
-                                next_val = parts[i+1] if i+1 < len(parts) else ''
-                                if re.match(r'^[\d\s\.,"]+$', val) and next_val in ('HUF', 'EUR'):
-                                    if not osszeg_bp:
-                                        osszeg_bp, bp_penznem = val.replace('"','').strip(), next_val
-                                    elif not osszeg_sp:
-                                        osszeg_sp, sp_penznem = val.replace('"','').strip(), next_val
-                        atvaltva_huf = (
-                            convert_to_huf(osszeg_bp, bp_penznem, eur_rate)
-                            if bp_penznem and bp_penznem != "HUF" else normalize_amount(osszeg_bp)
-                        )
-                        if szamla_szam and (osszeg_bp or osszeg_sp):
-                            result.append([
-                                vevo_nev,
-                                szamla_szam,
-                                format_hu_number(normalize_amount(osszeg_bp)),
-                                bp_penznem,
-                                format_hu_number(normalize_amount(osszeg_sp)),
-                                sp_penznem,
-                                format_hu_number(atvaltva_huf)
-                            ])
+                            osszeg_bp = bp_penznem = osszeg_sp = sp_penznem = ""
+                        results.append({
+                            "cegnev": cegnev if cegnev else "",
+                            "osszeg_bp": osszeg_bp,
+                            "bp_penznem": bp_penznem,
+                            "osszeg_sp": osszeg_sp,
+                            "sp_penznem": sp_penznem
+                        })
             break
         except Exception:
             continue
-    return result
+
+    # PRAKTIKER összevonás
+    praktiker_key = "Praktiker Kft."
+    summarized = {}
+    for row in results:
+        company = row["cegnev"]
+        is_praktiker = "praktiker" in company.lower()
+        key = praktiker_key if is_praktiker else company
+
+        # Segéd: magyar számformátum str -> float
+        def to_float(val):
+            if not val:
+                return 0.0
+            val = val.replace('.', '').replace(',', '.')
+            try:
+                return float(val)
+            except Exception:
+                return 0.0
+
+        if key not in summarized:
+            summarized[key] = {
+                "cegnev": key,
+                "osszeg_bp": 0.0,
+                "bp_penznem": row["bp_penznem"],
+                "osszeg_sp": 0.0,
+                "sp_penznem": row["sp_penznem"]
+            }
+        summarized[key]["osszeg_bp"] += to_float(row["osszeg_bp"])
+        summarized[key]["osszeg_sp"] += to_float(row["osszeg_sp"])
+        # Pénznemek: ha üres, akkor vegyük a következőt, különben az elsőt
+        if not summarized[key]["bp_penznem"]:
+            summarized[key]["bp_penznem"] = row["bp_penznem"]
+        if not summarized[key]["sp_penznem"]:
+            summarized[key]["sp_penznem"] = row["sp_penznem"]
+
+    # Visszaalakítjuk magyar formátumra
+    def format_hu(val):
+        return f'{val:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    output_rows = []
+    for data in summarized.values():
+        output_rows.append({
+            "cegnev": data["cegnev"],
+            "osszeg_bp": format_hu(data["osszeg_bp"]),
+            "bp_penznem": data["bp_penznem"],
+            "osszeg_sp": format_hu(data["osszeg_sp"]),
+            "sp_penznem": data["sp_penznem"]
+        })
+
+    # Betűrendbe rendezés cégnév szerint
+    output_rows.sort(key=lambda x: x["cegnev"].lower())
+    return output_rows
+
+def write_vevok_csv(results, output_path):
+    import csv
+    with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=[
+            "cegnev", "osszeg_bp", "bp_penznem", "osszeg_sp", "sp_penznem"
+        ])
+        writer.writeheader()
+        for row in results:
+            writer.writerow(row)
