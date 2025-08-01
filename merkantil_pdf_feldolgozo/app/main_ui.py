@@ -69,7 +69,11 @@ class MainUI(QWidget):
         try:
             run(pdf_path, xlsx_path)
             QMessageBox.information(self, "Siker", "A feldolgozás sikeresen lefutott.")
-            viewer = CSVViewer("output/output.csv")
+
+            BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            output_csv_path = os.path.join(BASE_DIR, "output", "output.csv")
+
+            viewer = CSVViewer(output_csv_path)
             viewer.exec()
         except Exception as e:
             QMessageBox.critical(self, "Hiba", f"Hiba történt:\n{str(e)}")
