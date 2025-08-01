@@ -60,7 +60,7 @@ def get_license_plate(vehicle_name):
     return match.group(1) if match else vehicle_name.split()[0]
 
 def read_kgthely_mapping(excel_path):
-    df = pd.read_excel(excel_path, dtype=str).fillna("")
+    df = pd.read_excel(excel_path, dtype=str, usecols=["frsz", "Helyes ktghely"], header=1).fillna("")
     return {str(row["frsz"]).strip(): str(row["Helyes ktghely"]).strip() for _, row in df.iterrows()}
 
 def save_to_csv_with_kgthely(data, output_path, kgthely_dict, round_amounts='No'):
