@@ -33,7 +33,7 @@ class MainUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("KSH + Matstamm egyesítő")
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(320)
 
         self.ksh_input = QLineEdit()
         ksh_btn = QPushButton("📂 Tallózás")
@@ -56,7 +56,7 @@ class MainUI(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.addLayout(self._row("KSH fájl (.xls unicode-text):", self.ksh_input, ksh_btn))
+        layout.addLayout(self._row("KSH fájl (.xls):", self.ksh_input, ksh_btn))
         layout.addLayout(self._row("Matstamm (.xlsx):", self.mat_input, mat_btn))
         layout.addWidget(self.process_btn)
         layout.addWidget(self.progress_bar)
