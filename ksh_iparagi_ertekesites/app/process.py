@@ -2,6 +2,7 @@ from pathlib import Path
 import csv
 import openpyxl
 from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
 from tkinter import Tk, filedialog
 import shutil
 
@@ -62,19 +63,19 @@ class Processor:
             new_row = row + [iparagi_ertekesites]
             new_data_rows.append(new_row)
 
-        # Magyar számformátumot (pl. 2.126,37) float-ra váltó segédfüggvény
-        def hu_to_float(cell):
+        # Segédfüggvény: csak tizedes pont, nincs ezres tagoló
+        def to_clean_float(cell):
             if not cell or cell.strip() == "":
-                return 0.0
-            s = str(cell).replace(" ", "")
-            s = s.replace(".", "")    # ezres tagoló pont eltűnik
-            s = s.replace(",", ".")   # tizedes vesszőből pont lesz
+                return None
+            s = str(cell).replace(" ", "")      # szóköz ki
+            s = s.replace(".", "")              # minden pont eltűnik (ezres tagoló is!)
+            s = s.replace(",", ".")             # csak a tizedes pont marad
             try:
                 return float(s)
             except Exception:
-                return 0.0
+                return None
 
-        # 6. Újranyitás: Egyenleg és pénznem oszlop beszúrása a Jóváírás utáni üres fejlécű (pénznem) oszlop UTÁN
+        # --- Megkeressük az Egyenleg oszlop indexét a végső fejléchez ---
         final_header = new_header
         final_data_rows = new_data_rows
 
@@ -100,6 +101,7 @@ class Processor:
             + final_header[egyenleg_value_idx:]
         )
 
+        # --- Az Egyenleg oszlopban megtartjuk a tizedes pontokat ---
         egysites_data_rows = []
         for row in final_data_rows:
             while len(row) < len(final_header):
@@ -123,56 +125,65 @@ class Processor:
             forgalom_value = row[forgalom_idx]
             forgalom_currency = row[forgalom_penznem_idx]
 
-            forgalom_val = hu_to_float(forgalom_value)
-            jovairas_val = hu_to_float(jovairas_value)
-            egyenleg_val = forgalom_val + jovairas_val
+            forgalom_val = to_clean_float(forgalom_value)
+            jovairas_val = to_clean_float(jovairas_value)
+            egyenleg_val = (forgalom_val or 0.0) + (jovairas_val or 0.0)
             egyenleg_cur = forgalom_currency or jovairas_currency or ""
 
+            # Egyenleg oszlop: tizedesponttal, stringként adjuk hozzá a CSV-hez, hogy ne veszítse el a tizedeseket
             new_row = (
                 row[:egyenleg_value_idx]
-                + [f"{egyenleg_val}", egyenleg_cur]
+                + [f"{egyenleg_val:.2f}", egyenleg_cur]
                 + row[egyenleg_value_idx:]
             )
             egysites_data_rows.append(new_row)
 
-        # 7. Mentsük le a data.csv-t (helyes float értékekkel a számmezőkben)
+        # 7. Mentsük le a data.csv-t (tizedespontos számokkal, NINCS ezres tagoló, Egyenleg is tizedesponttal)
         with open(output_csv_path, "w", encoding="utf-8", newline='') as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(egysites_header)
             writer.writerows(egysites_data_rows)
 
-        # 8. XLSX: fejlécre szűrő + kiemelt oszlopok színezése + automatikus oszlopszélesség
-        import string
+        # 8. XLSX: minden számot számként tárolunk, Egyenleg is floatként, tizedesponttal, nincs ezres tagoló
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Adatok"
+
+        # Megkeressük az Egyenleg oszlop indexét a végső fejléchez
+        egyenleg_col_idx = None
+        for idx, name in enumerate(egysites_header):
+            if name.strip() == "Egyenleg":
+                egyenleg_col_idx = idx
+                break
+
         with open(output_csv_path, "r", encoding="utf-8", newline='') as f:
             reader = list(csv.reader(f, delimiter=";"))
+            ws.append(reader[0])  # Fejléc
 
-            # Fejléc
-            ws.append(reader[0])
-
-            # Adatok
             for row in reader[1:]:
                 excel_row = []
-                for cell in row:
-                    try:
-                        if cell.strip() == "":
-                            excel_row.append("")
-                        else:
-                            # float-tá konvertáljuk, ha lehet
+                for idx, cell in enumerate(row):
+                    if idx == egyenleg_col_idx:
+                        # Egyenleg: mindig tizedesponttal, floatként adjuk hozzá
+                        try:
                             excel_row.append(float(cell))
-                    except Exception:
-                        excel_row.append(cell)
+                        except:
+                            excel_row.append(cell)
+                    else:
+                        num = to_clean_float(cell)
+                        if num is not None:
+                            excel_row.append(num)
+                        else:
+                            excel_row.append(cell)
                 ws.append(excel_row)
 
             max_row = ws.max_row
             max_col = ws.max_column
 
-            # Szűrő a fejlécre
+            # Fejlécre szűrő
             ws.auto_filter.ref = ws.dimensions
 
-            # Kiemelés: Forgalom, Jóváírás, Egyenleg, Iparági értékesítés
+            # Sárga kiemelés a fontos oszlopokra
             header = reader[0]
             highlight_names = ["Forgalom", "Jóváírás", "Egyenleg", "Iparági értékesítés"]
             highlight_cols = []
@@ -182,13 +193,13 @@ class Processor:
 
             yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
             for col in highlight_cols:
-                for row in range(2, max_row + 1):  # 2-től, mert 1. sor a fejléc
+                for row in range(2, max_row + 1):
                     ws.cell(row=row, column=col).fill = yellow_fill
 
             # Automatikus oszlopszélesség
             for col in ws.columns:
                 max_length = 0
-                column = col[0].column_letter  # get_column_letter(idx+1) helyett
+                column = col[0].column_letter
                 for cell in col:
                     try:
                         cell_value = str(cell.value) if cell.value is not None else ""
@@ -196,11 +207,11 @@ class Processor:
                             max_length = len(cell_value)
                     except Exception:
                         pass
-                ws.column_dimensions[column].width = max_length + 2  # egy kis ráhagyás
+                ws.column_dimensions[column].width = max_length + 2
 
         wb.save(output_xlsx_path)
 
-        # 9. Felugró mentési ablak, hogy a felhasználó kiválaszthassa a végleges helyet
+        # 9. Felugró mentési ablak a végleges mentéshez
         output_message = ""
         try:
             root = Tk()
