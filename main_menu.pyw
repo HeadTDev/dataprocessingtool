@@ -1,43 +1,87 @@
 import sys
 import subprocess
+import threading
+
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QMessageBox
-from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QMessageBox
+)
+from PySide6.QtCore import QTimer, QObject, Signal, Slot, Qt
 
 BUTTON_SIZE = (300, 40)
 
-# --- AUTO-UPDATE INTEGRÁCIÓ (PySide6) ---
+# --- AUTO-UPDATE INTEGRÁCIÓ (Thread-safe Qt bridge) ---
+
+class UpdateUIBridge(QObject):
+    requestPrompt = Signal(str)
+    requestInfo = Signal(str)
+    requestError = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._prompt_event = None
+        self._prompt_answer = False
+
+        self.requestPrompt.connect(self._onPrompt, Qt.QueuedConnection)
+        self.requestInfo.connect(self._onInfo, Qt.QueuedConnection)
+        self.requestError.connect(self._onError, Qt.QueuedConnection)
+
+    @Slot(str)
+    def _onPrompt(self, question: str):
+        # Ez a főszálban fut
+        res = QMessageBox.question(
+            None,
+            "Frissítés elérhető",
+            question,
+            QMessageBox.Yes | QMessageBox.No
+        )
+        self._prompt_answer = (res == QMessageBox.Yes)
+        if self._prompt_event:
+            self._prompt_event.set()
+
+    @Slot(str)
+    def _onInfo(self, msg: str):
+        QMessageBox.information(None, "Frissítés", msg)
+
+    @Slot(str)
+    def _onError(self, msg: str):
+        QMessageBox.critical(None, "Frissítés hiba", msg)
+
+    # --- Ezeket a függvényeket adjuk át callbackként a háttérszálnak ---
+
+    def ui_prompt(self, question: str) -> bool:
+        # A háttérszálból hívódik: szignál a főszálnak + várakozás
+        self._prompt_event = threading.Event()
+        self.requestPrompt.emit(question)
+        self._prompt_event.wait()
+        return self._prompt_answer
+
+    def ui_info(self, msg: str):
+        self.requestInfo.emit(msg)
+
+    def ui_error(self, msg: str):
+        self.requestError.emit(msg)
+
+
+_update_bridge = None  # hogy ne gyűjtse be a GC
+
 def start_auto_update():
+    global _update_bridge
     try:
         from auto_updater import perform_update_flow
     except ImportError:
         return
 
-    # UI callback-ek (main thread-ben fognak futni, mert a QMessageBox hívást
-    # a frissítő thread közvetlenül meghívhatja – Qt általában tolerálja, de
-    # legbiztosabb lenne signal-slot; itt egyszerűsítünk)
-    def ui_prompt(question: str) -> bool:
-        return QMessageBox.question(
-            None,
-            "Frissítés elérhető",
-            question,
-            QMessageBox.Yes | QMessageBox.No
-        ) == QMessageBox.Yes
+    _update_bridge = UpdateUIBridge()
 
-    def ui_info(msg: str):
-        QMessageBox.information(None, "Frissítés", msg)
-
-    def ui_error(msg: str):
-        QMessageBox.critical(None, "Frissítés hiba", msg)
-
-    # Háttérszálon futtatjuk a hálózati munkát, hogy ne blokkolja a GUI-t
+    # Háttérszálban fut; a UI interakciók a bridge-en keresztül a főszálra kerülnek
     perform_update_flow(
         incremental_preferred=True,
-        ui_prompt=ui_prompt,
-        ui_info=ui_info,
-        ui_error=ui_error,
+        ui_prompt=_update_bridge.ui_prompt,
+        ui_info=_update_bridge.ui_info,
+        ui_error=_update_bridge.ui_error,
         run_in_thread=True,
-        delay_seconds=1.5  # kis késleltetés, hogy a főablak meg tudjon jelenni
+        delay_seconds=1.0
     )
 
 class MainMenu(QWidget):
@@ -72,7 +116,8 @@ if __name__ == "__main__":
 
     window = MainMenu()
     window.show()
-    
+
+    # Indítás után kis késleltetéssel ellenőrzés
     QTimer.singleShot(500, start_auto_update)
 
     sys.exit(app.exec())
