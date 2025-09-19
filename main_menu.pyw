@@ -101,6 +101,8 @@ class MainMenu(QWidget):
 
         self.setLayout(layout)
 
+        ##Valami módosítás hogy teszteljem műkködik-e az auto update.
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainMenu()
