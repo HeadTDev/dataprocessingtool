@@ -6,3 +6,7 @@
 
 ## Ignore Python bytecode files
 *.pyc
+
+# --- Auto updater state & logs ---
+version.json
+update_log.txt

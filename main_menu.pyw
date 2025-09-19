@@ -72,8 +72,7 @@ if __name__ == "__main__":
 
     window = MainMenu()
     window.show()
-
-    # Indítás után időzítve megkezdjük az ellenőrzést
+    
     QTimer.singleShot(500, start_auto_update)
 
     sys.exit(app.exec())
