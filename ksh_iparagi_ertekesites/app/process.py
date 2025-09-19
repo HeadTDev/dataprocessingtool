@@ -2,7 +2,6 @@ from pathlib import Path
 import csv
 import openpyxl
 from openpyxl.styles import PatternFill
-from openpyxl.utils import get_column_letter
 from tkinter import Tk, filedialog
 import shutil
 
@@ -14,22 +13,18 @@ class Processor:
         output_csv_path = output_dir / "data.csv"
         output_xlsx_path = output_dir / "data.xlsx"
 
-        # 1. KSH Unicode text beolvasása (UTF-16LE, tab-delimited)
         with open(ksh_path, "r", encoding="utf-16le", newline='') as f:
             reader = csv.reader(f, delimiter="\t")
             rows = [row for row in reader]
 
-        # 2. Törlendő sorok: 1,2,4,5 (0-,1-,3-,4-index)
-        rows_to_delete = {0, 1, 3, 4}
+        rows_to_delete = {0, 1, 2, 4, 5}
         cleaned_rows = [row for i, row in enumerate(rows) if i not in rows_to_delete]
-        if not cleaned_rows or len(cleaned_rows) < 2:
+        if len(cleaned_rows) < 2:
             raise ValueError("A bemeneti fájl túl kevés sort tartalmaz a feldolgozáshoz.")
 
-        # 3. Fejléc és adatsorok
         header = cleaned_rows[0]
         data_rows = cleaned_rows[1:]
 
-        # 4. MATSTAMM beolvasása: "Anyag" és "Beszerzés fajtája" kigyűjtése
         mat_lookup = {}
         wb = openpyxl.load_workbook(matstamm_path, read_only=True, data_only=True)
         ws = wb.active
@@ -52,30 +47,32 @@ class Processor:
         except ValueError:
             raise ValueError("A KSH fájl fejlécében nincs 'Anyag' oszlop.")
 
-        # 5. Új fejléc: "Iparági értékesítés"
-        new_header = header + ["Iparági értékesítés"]
+        new_header = header.copy()
+        if new_header[-1].strip() != "":
+            new_header.append("")
+        new_header.append("Iparági értékesítés")
+
         new_data_rows = []
         for row in data_rows:
             while len(row) < len(header):
                 row.append("")
             anyag_val = str(row[data_anyag_idx]).strip()
             iparagi_ertekesites = mat_lookup.get(anyag_val, "")
-            new_row = row + [iparagi_ertekesites]
+            new_row = row.copy()
+            if len(new_row) < len(new_header) - 1:
+                new_row.append("")
+            new_row.append(iparagi_ertekesites)
             new_data_rows.append(new_row)
 
-        # Segédfüggvény: csak tizedes pont, nincs ezres tagoló
         def to_clean_float(cell):
             if not cell or cell.strip() == "":
                 return None
-            s = str(cell).replace(" ", "")      # szóköz ki
-            s = s.replace(".", "")              # minden pont eltűnik (ezres tagoló is!)
-            s = s.replace(",", ".")             # csak a tizedes pont marad
+            s = str(cell).replace(" ", "").replace(".", "").replace(",", ".")
             try:
                 return float(s)
             except Exception:
                 return None
 
-        # --- Megkeressük az Egyenleg oszlop indexét a végső fejléchez ---
         final_header = new_header
         final_data_rows = new_data_rows
 
@@ -86,11 +83,7 @@ class Processor:
             raise ValueError(f"{name} oszlop nem található a fejlécben.")
 
         jovairas_idx = find_first_named_index(final_header, "Jóváírás")
-        penznem_idx = None
-        for i in range(jovairas_idx + 1, len(final_header)):
-            if final_header[i].strip() == "":
-                penznem_idx = i
-                break
+        penznem_idx = next((i for i in range(jovairas_idx + 1, len(final_header)) if final_header[i].strip() == ""), None)
         if penznem_idx is None:
             raise ValueError("Nem található üres pénznem oszlop a Jóváírás után.")
         egyenleg_value_idx = penznem_idx + 1
@@ -101,74 +94,62 @@ class Processor:
             + final_header[egyenleg_value_idx:]
         )
 
-        # --- Az Egyenleg oszlopban megtartjuk a tizedes pontokat ---
         egysites_data_rows = []
         for row in final_data_rows:
             while len(row) < len(final_header):
                 row.append("")
             jovairas_value = row[jovairas_idx]
             jovairas_currency = row[penznem_idx]
-            forgalom_idx = None
-            for i in range(jovairas_idx - 1, -1, -1):
-                if final_header[i].strip() == "Forgalom":
-                    forgalom_idx = i
-                    break
+            forgalom_idx = next((i for i in range(jovairas_idx - 1, -1, -1) if final_header[i].strip() == "Forgalom"), None)
             if forgalom_idx is None:
                 raise ValueError("Forgalom oszlop nem található a Jóváírás előtt!")
-            forgalom_penznem_idx = None
-            for i in range(forgalom_idx + 1, len(final_header)):
-                if final_header[i].strip() == "":
-                    forgalom_penznem_idx = i
-                    break
+            forgalom_penznem_idx = next((i for i in range(forgalom_idx + 1, len(final_header)) if final_header[i].strip() == ""), None)
             if forgalom_penznem_idx is None:
                 raise ValueError("Forgalom pénznem oszlop nem található!")
             forgalom_value = row[forgalom_idx]
             forgalom_currency = row[forgalom_penznem_idx]
-
             forgalom_val = to_clean_float(forgalom_value)
             jovairas_val = to_clean_float(jovairas_value)
             egyenleg_val = (forgalom_val or 0.0) + (jovairas_val or 0.0)
             egyenleg_cur = forgalom_currency or jovairas_currency or ""
-
-            # Egyenleg oszlop: tizedesponttal, stringként adjuk hozzá a CSV-hez, hogy ne veszítse el a tizedeseket
             new_row = (
                 row[:egyenleg_value_idx]
                 + [f"{egyenleg_val:.2f}", egyenleg_cur]
-                + row[egyenleg_value_idx:]
+                + row[egyenleg_value_idx:-2]
+                + [row[-2], row[-1]]
             )
             egysites_data_rows.append(new_row)
 
-        # 7. Mentsük le a data.csv-t (tizedespontos számokkal, NINCS ezres tagoló, Egyenleg is tizedesponttal)
         with open(output_csv_path, "w", encoding="utf-8", newline='') as f:
             writer = csv.writer(f, delimiter=";")
             writer.writerow(egysites_header)
             writer.writerows(egysites_data_rows)
 
-        # 8. XLSX: minden számot számként tárolunk, Egyenleg is floatként, tizedesponttal, nincs ezres tagoló
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Adatok"
 
-        # Megkeressük az Egyenleg oszlop indexét a végső fejléchez
         egyenleg_col_idx = None
+        iparagi_col_idx = None
         for idx, name in enumerate(egysites_header):
             if name.strip() == "Egyenleg":
                 egyenleg_col_idx = idx
-                break
+            if name.strip() == "Iparági értékesítés":
+                iparagi_col_idx = idx
 
         with open(output_csv_path, "r", encoding="utf-8", newline='') as f:
             reader = list(csv.reader(f, delimiter=";"))
-            ws.append(reader[0])  # Fejléc
-
+            ws.append(reader[0])
             for row in reader[1:]:
                 excel_row = []
                 for idx, cell in enumerate(row):
                     if idx == egyenleg_col_idx:
-                        # Egyenleg: mindig tizedesponttal, floatként adjuk hozzá
                         try:
-                            excel_row.append(float(cell))
+                            excel_row.append(round(float(cell), 2))
                         except:
                             excel_row.append(cell)
+                    elif idx == iparagi_col_idx:
+                        excel_row.append(cell)
                     else:
                         num = to_clean_float(cell)
                         if num is not None:
@@ -178,25 +159,18 @@ class Processor:
                 ws.append(excel_row)
 
             max_row = ws.max_row
-            max_col = ws.max_column
 
-            # Fejlécre szűrő
             ws.auto_filter.ref = ws.dimensions
 
-            # Sárga kiemelés a fontos oszlopokra
             header = reader[0]
             highlight_names = ["Forgalom", "Jóváírás", "Egyenleg", "Iparági értékesítés"]
-            highlight_cols = []
-            for idx, name in enumerate(header):
-                if name.strip() in highlight_names:
-                    highlight_cols.append(idx + 1)  # 1-based
+            highlight_cols = [idx + 1 for idx, name in enumerate(header) if name.strip() in highlight_names]
 
             yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
             for col in highlight_cols:
                 for row in range(2, max_row + 1):
                     ws.cell(row=row, column=col).fill = yellow_fill
 
-            # Automatikus oszlopszélesség
             for col in ws.columns:
                 max_length = 0
                 column = col[0].column_letter
@@ -211,7 +185,6 @@ class Processor:
 
         wb.save(output_xlsx_path)
 
-        # 9. Felugró mentési ablak a végleges mentéshez
         output_message = ""
         try:
             root = Tk()
