@@ -2,12 +2,15 @@ from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
     QVBoxLayout, QHBoxLayout, QMessageBox
 )
+from PySide6.QtGui import QIcon
+import os
 from .process import Processor
 
 class MainUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("KSH + Matstamm egyesítő")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "ksh_icon.png")))
         self.setMinimumWidth(320)
 
         self.ksh_input = QLineEdit()

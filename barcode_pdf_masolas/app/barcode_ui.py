@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
     QVBoxLayout, QHBoxLayout, QMessageBox
 )
-from app.barcode_copier import copy_matching_pdfs
+from .barcode_copier import copy_matching_pdfs
 
 class BarcodeCopierWindow(QWidget):
     def __init__(self):

@@ -1,12 +1,20 @@
-import sys
 from PySide6.QtWidgets import QApplication
-from app.barcode_ui import BarcodeCopierWindow
+from .app.barcode_ui import BarcodeCopierWindow  # relatív import
 
 def main():
-    app = QApplication(sys.argv)
-    window = BarcodeCopierWindow()
-    window.show()
-    sys.exit(app.exec())
+    app = QApplication.instance()
+    owns_app = False
+    if app is None:
+        app = QApplication([])
+        owns_app = True
+
+    w = BarcodeCopierWindow()
+    w.show()
+
+    if owns_app:
+        app.exec()
+
+    return w 
 
 if __name__ == "__main__":
     main()
