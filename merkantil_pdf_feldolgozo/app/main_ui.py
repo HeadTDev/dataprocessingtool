@@ -1,4 +1,6 @@
 import os
+import logging
+from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
@@ -6,6 +8,9 @@ from PySide6.QtWidgets import (
 )
 from .processor import run
 from .viewer import CSVViewer
+from common import Config, FileValidator
+
+logger = logging.getLogger("merkantil_processor")
 
 class MainUI(QWidget):
     def __init__(self):
@@ -26,7 +31,7 @@ class MainUI(QWidget):
 
         # Feldolgozás gomb
         self.process_btn = QPushButton("⚙️ Feldolgozás")
-        self.process_btn.setFixedSize(300, 40)
+        self.process_btn.setFixedSize(Config.BUTTON_WIDTH, Config.BUTTON_HEIGHT)
         self.process_btn.clicked.connect(self.process_file)
 
         layout = QVBoxLayout()
@@ -60,20 +65,41 @@ class MainUI(QWidget):
     def process_file(self):
         pdf_path = self.pdf_path_input.text()
         xlsx_path = self.xlsx_path_input.text()
+        
         if not pdf_path:
             QMessageBox.warning(self, "Nincs PDF", "Először válassz ki egy PDF-et.")
             return
         if not xlsx_path:
             QMessageBox.warning(self, "Nincs autók Excel", "Először válassz ki egy autók Excel fájlt.")
             return
+        
         try:
+            # Validate inputs
+            FileValidator.validate_pdf(Path(pdf_path))
+            FileValidator.validate_excel(Path(xlsx_path), required_columns=["frsz", "Helyes ktghely"])
+            
+            # Process
             run(pdf_path, xlsx_path)
+            
             QMessageBox.information(self, "Siker", "A feldolgozás sikeresen lefutott.")
-
-            BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            output_csv_path = os.path.join(BASE_DIR, "output", "output.csv")
-
-            viewer = CSVViewer(output_csv_path)
+            
+            # Show viewer
+            BASE_DIR = Path(__file__).parent.parent
+            output_csv_path = BASE_DIR / "output" / "output.csv"
+            
+            viewer = CSVViewer(str(output_csv_path))
             viewer.exec()
+            
+        except FileNotFoundError as e:
+            logger.error(f"File not found: {e}")
+            QMessageBox.critical(self, "Hiányzó fájl", f"A fájl nem található:\n{e}")
+        except ValueError as e:
+            logger.error(f"Invalid data: {e}")
+            QMessageBox.critical(self, "Érvénytelen adat", str(e))
         except Exception as e:
-            QMessageBox.critical(self, "Hiba", f"Hiba történt:\n{str(e)}")
+            logger.exception("Unexpected error during processing")
+            QMessageBox.critical(
+                self, 
+                "Váratlan hiba", 
+                f"Váratlan hiba történt:\n{type(e).__name__}: {str(e)}\n\nRészletek a logban."
+            )
