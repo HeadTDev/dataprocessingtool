@@ -66,7 +66,19 @@ class BarcodeCopierWindow(QWidget):
         output_folder = self.output_folder_input.text()
 
         try:
-            count = copy_matching_pdfs(excel_path, pdf_folder, output_folder)
-            QMessageBox.information(self, "Siker", f"{count} PDF fájl sikeresen átmásolva.")
+            result = copy_matching_pdfs(excel_path, pdf_folder, output_folder)
+            
+            message = f"{result['copied']} PDF fájl sikeresen átmásolva."
+            
+            if result['not_found']:
+                not_found_count = len(result['not_found'])
+                if not_found_count <= 10:
+                    not_found_list = ', '.join(result['not_found'])
+                    message += f"\n\n{not_found_count} vonalkód nem található:\n{not_found_list}"
+                else:
+                    message += f"\n\n{not_found_count} vonalkód nem található (túl sok a megjelenítéshez)."
+            
+            QMessageBox.information(self, "Siker", message)
+            
         except Exception as e:
             QMessageBox.critical(self, "Hiba", f"Hiba történt a másolás során:\n{str(e)}")

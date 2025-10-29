@@ -1,6 +1,7 @@
 import sys
 import threading
 from importlib import import_module
+import logging
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -8,11 +9,20 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QTimer, QObject, Signal, Slot, Qt
 
-BUTTON_SIZE = (300, 40)
+from common import Config
+
+logger = logging.getLogger("main_menu")
+
 
 def resource_path(*parts: str) -> str:
     """
-    Erőforrás elérés fejlesztői és becsomagolt (PyInstaller) futásnál is.
+    Resource path resolution for development and PyInstaller bundled execution.
+    
+    Args:
+        *parts: Path components
+        
+    Returns:
+        Absolute path to resource
     """
     base = getattr(sys, "_MEIPASS", None)
     if base:
@@ -24,6 +34,8 @@ def resource_path(*parts: str) -> str:
 
 
 class UpdateUIBridge(QObject):
+    """Bridge between auto-updater thread and UI thread for safe updates."""
+    
     requestPrompt = Signal(str)
     requestInfo = Signal(str)
     requestError = Signal(str)
@@ -80,48 +92,62 @@ class UpdateUIBridge(QObject):
         self.requestSetVersion.emit(version_tag or "ismeretlen")
 
 
-_update_bridge = None
-
-def start_auto_update(version_label: QLabel):
-    global _update_bridge
+def start_auto_update(version_label: QLabel) -> Optional[UpdateUIBridge]:
+    """
+    Start auto-update process.
+    
+    Args:
+        version_label: Label to update with version info
+        
+    Returns:
+        UpdateUIBridge instance or None if auto_updater unavailable
+    """
     try:
         from auto_updater import perform_update_flow, read_local_version_info
     except ImportError:
-        return
+        logger.warning("Auto-updater not available")
+        return None
 
     info = read_local_version_info()
     version_label.setText(f"Verzió: {info.get('version') or 'ismeretlen'}")
 
-    _update_bridge = UpdateUIBridge(version_label)
+    update_bridge = UpdateUIBridge(version_label)
     perform_update_flow(
         incremental_preferred=True,
-        ui_prompt=_update_bridge.ui_prompt,
-        ui_info=_update_bridge.ui_info,
-        ui_error=_update_bridge.ui_error,
-        ui_set_version=_update_bridge.ui_set_version,
+        ui_prompt=update_bridge.ui_prompt,
+        ui_info=update_bridge.ui_info,
+        ui_error=update_bridge.ui_error,
+        ui_set_version=update_bridge.ui_set_version,
         run_in_thread=True,
         delay_seconds=1.0
     )
-
+    
+    return update_bridge
 
 class MainMenu(QWidget):
+    """Main menu window for the application."""
+    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Főmenü")
         self.setWindowIcon(QIcon(resource_path("synthwave_icon.png")))
         self.setMinimumSize(320, 220)
+        
         self.version_label = QLabel("Verzió: betöltés...")
         f = self.version_label.font()
         f.setPointSize(f.pointSize() - 1)
         self.version_label.setFont(f)
 
-        # Megnyitott modulablakok referenciái (hogy ne gyűjtse be a GC)
-        # kulcs: pkg név, érték: QWidget példány
+        # Keep reference to opened module windows
         self._open_windows = {}
+        
+        # Store update bridge reference as instance variable
+        self.update_bridge = None
 
         self.init_ui()
 
     def init_ui(self):
+        """Initialize the user interface."""
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Válassz egy alkalmazást:"))
 
@@ -134,7 +160,7 @@ class MainMenu(QWidget):
 
         for text, pkg in buttons:
             btn = QPushButton(text)
-            btn.setFixedSize(*BUTTON_SIZE)
+            btn.setFixedSize(Config.BUTTON_WIDTH, Config.BUTTON_HEIGHT)
             btn.clicked.connect(lambda _, p=pkg: self.open_module(p, "run", "main"))
             layout.addWidget(btn)
 
@@ -144,10 +170,14 @@ class MainMenu(QWidget):
 
     def open_module(self, pkg_name: str, entry_module: str = "run", entry_func: str = "main"):
         """
-        Modul indítása importtal és a visszaadott ablak referencia eltárolása.
-        Ha már megnyitottuk, hozza előre.
+        Launch a module by importing and calling its entry function.
+        
+        Args:
+            pkg_name: Package name to import
+            entry_module: Module name within package
+            entry_func: Function name to call
         """
-        # Ha már van példány, csak előtérbe hozzuk
+        # If window already exists, bring it to front
         w = self._open_windows.get(pkg_name)
         if w is not None:
             try:
@@ -156,44 +186,45 @@ class MainMenu(QWidget):
                 w.activateWindow()
                 return
             except RuntimeError:
-                # lehet, hogy már bezárták → töröljük a referenciát és újranyitjuk
+                # Window was closed, remove reference
                 self._open_windows.pop(pkg_name, None)
 
         try:
             mod = import_module(f"{pkg_name}.{entry_module}")
         except Exception as e:
+            logger.exception(f"Failed to import module {pkg_name}")
             QMessageBox.critical(self, "Hiba", f"Nem sikerült betölteni a modult: {pkg_name}\n{e}")
             return
 
         entry = getattr(mod, entry_func, None)
         if not callable(entry):
+            logger.error(f"Module {pkg_name} has no callable {entry_func}")
             QMessageBox.critical(self, "Hiba", f"A modul bejárata hiányzik: {pkg_name}.{entry_module}:{entry_func}")
             return
 
-        # A modul main() visszaadja az ablakot
+        # Call module main() which returns the window
         try:
             w = entry()
         except Exception as e:
+            logger.exception(f"Error launching module {pkg_name}")
             QMessageBox.critical(self, "Hiba", f"Hiba a modul indításakor: {pkg_name}\n{e}")
             return
 
-        # Ha a modul nem adott vissza ablakot, nem tudjuk tartani a referenciát,
-        # de megpróbáljuk előtérbe hozni, hátha mégis létezik
         if w is None:
             return
 
-        # Referencia megtartása, és ha bezárják, töröljük a referenciát
+        # Keep reference and clean up when destroyed
         self._open_windows[pkg_name] = w
         try:
             w.destroyed.connect(lambda: self._open_windows.pop(pkg_name, None))
             w.show()
             w.raise_()
             w.activateWindow()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to setup window signals: {e}")
 
 
-# Statikus import hint PyInstallerhez
+# PyInstaller static import hints (kept for PyInstaller detection)
 if False:
     import barcode_pdf_masolas.run  # noqa: F401
     import cofanet_help.run         # noqa: F401
@@ -202,8 +233,16 @@ if False:
 
 
 if __name__ == "__main__":
+    from common import setup_logging
+    
+    # Setup logging
+    setup_logging(module_name="main_menu")
+    
     app = QApplication(sys.argv)
     window = MainMenu()
     window.show()
-    QTimer.singleShot(500, lambda: start_auto_update(window.version_label))
+    
+    # Start auto-update after a short delay
+    QTimer.singleShot(500, lambda: setattr(window, 'update_bridge', start_auto_update(window.version_label)))
+    
     sys.exit(app.exec())
