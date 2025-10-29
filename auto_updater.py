@@ -8,24 +8,31 @@ import urllib.error
 import shutil
 import tempfile
 from datetime import datetime, timezone
+from typing import Optional, Callable, Dict, Any
+import logging
 
-OWNER = "HeadTDev"
-REPO = "dataprocessingtool"
+from common import Config
+
+logger = logging.getLogger("auto_updater")
+
+OWNER = Config.GITHUB_OWNER
+REPO = Config.GITHUB_REPO
 
 VERSION_FILE = "version.json"
 LOG_FILE = "update_log.txt"
 
-CHECK_TIMEOUT = 8
+CHECK_TIMEOUT = Config.UPDATE_CHECK_TIMEOUT  # Increased to 30 seconds
 USER_AGENT = f"ReleaseAutoUpdater/2.0 (+https://github.com/{OWNER}/{REPO})"
 
 DEBUG = True
 ALLOW_ZIP_FALLBACK = True
-INCREMENTAL_DEFAULT = True   # ha van commit összehasonlítási alap
-INITIALIZE_WITHOUT_FORCE_DOWNLOAD = True  # első futásnál (nincs version.json) ne töltsön, csak inicializáljon
+INCREMENTAL_DEFAULT = True
+INITIALIZE_WITHOUT_FORCE_DOWNLOAD = True
 
-MAX_BODY_SNIPPET = 400  # promptban ennyire vágjuk a release body-t
+MAX_BODY_SNIPPET = 400
 
-def log(msg: str):
+def log(msg: str) -> None:
+    """Log message to file and optionally console."""
     ts = datetime.now(timezone.utc).isoformat()
     line = f"[{ts}] {msg}"
     try:
@@ -35,21 +42,25 @@ def log(msg: str):
         pass
     if DEBUG:
         print(line)
+    logger.debug(msg)
 
 
-def safe_json_load(path: str):
+def safe_json_load(path: str) -> Dict[str, Any]:
+    """Safely load JSON file, returning empty dict on error."""
     if not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to load JSON from {path}: {e}")
         return {}
 
 
-def read_local_version_info():
+def read_local_version_info() -> Dict[str, str]:
+    """Read local version information."""
     data = safe_json_load(VERSION_FILE)
-    # Régi formátum kompatibilitás (ha csak commit volt)
+    # Backwards compatibility for old format
     version = data.get("version") or data.get("tag") or ""
     commit = data.get("commit") or data.get("sha") or ""
     return {
@@ -59,7 +70,8 @@ def read_local_version_info():
     }
 
 
-def write_local_version(version_tag: str, commit_sha: str):
+def write_local_version(version_tag: str, commit_sha: str) -> None:
+    """Write version information to file."""
     data = {
         "version": version_tag,
         "commit": commit_sha,
@@ -69,6 +81,7 @@ def write_local_version(version_tag: str, commit_sha: str):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(tmp, VERSION_FILE)
+    logger.info(f"Updated version to {version_tag}")
 
 
 def _build_request(url: str, accept_json=True):
