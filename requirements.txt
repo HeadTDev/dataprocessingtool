@@ -3,3 +3,4 @@ PyPDF2
 pandas
 openpyxl
 rapidfuzz>=3.0.0
+chardet>=5.0.0
