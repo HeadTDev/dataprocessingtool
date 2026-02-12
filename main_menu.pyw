@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QTimer, QObject, Signal, Slot, Qt
 
+from theme import get_dark_theme_stylesheet, get_action_button_stylesheet
+
 BUTTON_SIZE = (300, 40)
 
 def resource_path(*parts: str) -> str:
@@ -120,6 +122,7 @@ class MainMenu(QWidget):
         self._open_windows = {}
 
         self.init_ui()
+        self._apply_theme()
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -136,12 +139,16 @@ class MainMenu(QWidget):
         for text, pkg in buttons:
             btn = QPushButton(text)
             btn.setFixedSize(*BUTTON_SIZE)
+            btn.setStyleSheet(get_action_button_stylesheet())
             btn.clicked.connect(lambda _, p=pkg: self.open_module(p, "run", "main"))
             layout.addWidget(btn)
 
         layout.addStretch()
         layout.addWidget(self.version_label, alignment=Qt.AlignRight)
         self.setLayout(layout)
+
+    def _apply_theme(self):
+        self.setStyleSheet(get_dark_theme_stylesheet())
 
     def open_module(self, pkg_name: str, entry_module: str = "run", entry_func: str = "main"):
         """
@@ -192,6 +199,15 @@ class MainMenu(QWidget):
             w.activateWindow()
         except Exception:
             pass
+
+    def closeEvent(self, event):
+        """Főmenü bezárásakor az összes nyitott modult is bezárjuk."""
+        for w in list(self._open_windows.values()):
+            try:
+                w.close()
+            except Exception:
+                pass
+        event.accept()
 
 
 # Statikus import hint PyInstallerhez

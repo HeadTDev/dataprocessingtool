@@ -13,13 +13,18 @@ from PySide6.QtGui import QFont
 
 from .mover import CursorMover, MoveSettings
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from theme import get_dark_theme_stylesheet, get_action_button_stylesheet
+
 
 class MainUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🖱️ Mouse Mover")
-        self.setMinimumWidth(400)
-        self.setMinimumHeight(500)
+        self.setMinimumWidth(320)
+        self.setMinimumHeight(420)
 
         self._apply_dark_theme()
 
@@ -83,51 +88,13 @@ class MainUI(QWidget):
 
         # Buttons
         self.start_btn = QPushButton("▶ Start")
-        self.start_btn.setMinimumHeight(44)
-        self.start_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #22aa44;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #28cc55;
-            }
-            QPushButton:pressed {
-                background-color: #1a8833;
-            }
-            QPushButton:disabled {
-                background-color: #555555;
-                color: #999999;
-            }
-        """)
+        self.start_btn.setMinimumHeight(36)
+        self.start_btn.setStyleSheet(get_action_button_stylesheet())
         self.start_btn.clicked.connect(self.start_mover)
 
         self.stop_btn = QPushButton("⏹ Stop")
-        self.stop_btn.setMinimumHeight(44)
-        self.stop_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #cc2222;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #ff3333;
-            }
-            QPushButton:pressed {
-                background-color: #990000;
-            }
-            QPushButton:disabled {
-                background-color: #555555;
-                color: #999999;
-            }
-        """)
+        self.stop_btn.setMinimumHeight(36)
+        self.stop_btn.setStyleSheet(get_action_button_stylesheet())
         self.stop_btn.clicked.connect(self.stop_mover)
         self.stop_btn.setEnabled(False)
 
@@ -188,45 +155,19 @@ class MainUI(QWidget):
         self._countdown_timer.timeout.connect(self._update_countdown)
 
     def _apply_dark_theme(self):
-        stylesheet = """
-            QWidget {
-                background-color: #1e1e1e;
-                color: #e0e0e0;
-            }
-            QGroupBox {
-                color: #e0e0e0;
-                border: 1px solid #444444;
-                border-radius: 4px;
-                margin-top: 8px;
-                padding-top: 8px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 3px 0 3px;
-            }
-            QSlider::groove:horizontal {
-                border: 1px solid #444444;
-                height: 6px;
-                background: #2a2a2a;
-                border-radius: 3px;
-            }
+        # Base dark theme with custom yellow slider handles for mouse_mover
+        self.setStyleSheet(get_dark_theme_stylesheet() + """
             QSlider::handle:horizontal {
-                background: #00aaff;
-                border: 1px solid #00aaff;
+                background: #CCAA00;
+                border: 1px solid #CCAA00;
                 width: 14px;
                 margin: -4px 0;
                 border-radius: 7px;
             }
             QSlider::handle:horizontal:hover {
-                background: #00ccff;
+                background: #DDBB00;
             }
-            QLabel {
-                color: #e0e0e0;
-            }
-        """
-        self.setStyleSheet(stylesheet)
+        """)
 
     def _slider_row(self, label_text, slider, value_label):
         row = QHBoxLayout()
