@@ -135,8 +135,11 @@ def download_file_raw(commit_sha: str, path: str) -> bytes:
     return http_get_bytes(raw_url)
 
 
-def apply_incremental_update(changed_files: list, head_sha: str):
-    for fentry in changed_files:
+def apply_incremental_update(changed_files: list, head_sha: str, progress_cb=None):
+    total = len(changed_files)
+    for idx, fentry in enumerate(changed_files, start=1):
+        if progress_cb:
+            progress_cb("Fajlok frissitese...", idx, total, False)
         status = fentry.get("status")
         filename = fentry.get("filename")
         prev_name = fentry.get("previous_filename")
@@ -183,13 +186,27 @@ def apply_incremental_update(changed_files: list, head_sha: str):
             log(f"Ismeretlen státusz: {status} - {filename}")
 
 
-def download_release_zip(zip_url: str):
+def download_release_zip(zip_url: str, progress_cb=None):
     log("Release ZIP letöltése...")
-    zip_bytes = http_get_bytes(zip_url)
     with tempfile.TemporaryDirectory() as td:
         zip_path = os.path.join(td, "rel.zip")
-        with open(zip_path, "wb") as f:
-            f.write(zip_bytes)
+        req = _build_request(zip_url, accept_json=False)
+        with urllib.request.urlopen(req, timeout=CHECK_TIMEOUT) as resp, open(zip_path, "wb") as f:
+            total = resp.headers.get("Content-Length")
+            try:
+                total = int(total) if total else -1
+            except ValueError:
+                total = -1
+            downloaded = 0
+            chunk_size = 1024 * 64
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if progress_cb:
+                    progress_cb("Letoltes...", downloaded, total, False)
         import zipfile
         with zipfile.ZipFile(zip_path, "r") as zf:
             # A zipball_url általában <owner>-<repo>-<sha> / vagy hasonló root mappa
@@ -240,6 +257,15 @@ def _default_error(m: str):
 def _default_set_version(v: str):
     log(f"[SET_VERSION_CALLBACK] {v}")
 
+def _default_progress(label: str, current: int, total: int, done: bool):
+    if done:
+        log("[PROGRESS] done")
+        return
+    if total and total > 0:
+        log(f"[PROGRESS] {label} {current}/{total}")
+    else:
+        log(f"[PROGRESS] {label} {current}")
+
 
 def perform_update_flow(
     incremental_preferred=True,
@@ -247,6 +273,7 @@ def perform_update_flow(
     ui_info=_default_info,
     ui_error=_default_error,
     ui_set_version=_default_set_version,
+    ui_progress=_default_progress,
     run_in_thread=False,
     delay_seconds=1.0
 ):
@@ -265,6 +292,7 @@ def perform_update_flow(
             release = get_latest_release()
         except Exception as e:
             log(f"Nem sikerült lekérni a latest release-t: {e}")
+            ui_progress("", 0, 0, True)
             return
 
         remote_tag = release.get("tag_name") or ""
@@ -277,17 +305,20 @@ def perform_update_flow(
 
         if not remote_tag:
             log("A release-ben nincs tag_name, kilépés.")
+            ui_progress("", 0, 0, True)
             return
 
         try:
             remote_commit_sha = get_commit_sha_for_tag(remote_tag)
         except Exception as e:
             log(f"Nem sikerült commit SHA-t lekérni a tagez: {e}")
+            ui_progress("", 0, 0, True)
             return
 
         if local_tag == remote_tag:
             log("Nincs új release (azonos tag).")
             ui_set_version(remote_tag or "ismeretlen")
+            ui_progress("", 0, 0, True)
             return
 
         # Első inicializáció (nincs helyi tag) – opcionálisan csak beállítjuk és nem töltünk
@@ -304,6 +335,7 @@ def perform_update_flow(
 
         if not ui_prompt(prompt_msg):
             log("Felhasználó elutasította a release frissítést.")
+            ui_progress("", 0, 0, True)
             return
 
         # Próbálunk inkrementális diff-et, ha van lokális commit és engedélyezett
@@ -315,7 +347,7 @@ def perform_update_flow(
                 files = cmp_data.get("files", [])
                 log(f"Compare: ahead_by={ahead_by}, files={len(files)}")
                 if ahead_by and ahead_by > 0 and files:
-                    apply_incremental_update(files, remote_commit_sha)
+                    apply_incremental_update(files, remote_commit_sha, progress_cb=ui_progress)
                     did_incremental = True
                     log("Inkrementális frissítés sikeres release-re.")
                 else:
@@ -331,15 +363,17 @@ def perform_update_flow(
                 zip_url = release.get("zipball_url")
                 if not zip_url:
                     raise RuntimeError("Hiányzik zipball_url a release-ben.")
-                download_release_zip(zip_url)
+                download_release_zip(zip_url, progress_cb=ui_progress)
             except Exception as e:
                 ui_error(f"ZIP alapú frissítés sikertelen: {e}")
+                ui_progress("", 0, 0, True)
                 return
 
         # Verzió mentése
         write_local_version(remote_tag, remote_commit_sha)
         ui_set_version(remote_tag)
         ui_info(f"Frissítés kész: {remote_tag}. Indítsd újra az alkalmazást a teljes érvényesüléshez.")
+        ui_progress("", 0, 0, True)
 
     if run_in_thread:
         t = threading.Thread(target=_work, name="ReleaseAutoUpdaterThread", daemon=True)

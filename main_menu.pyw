@@ -4,7 +4,7 @@ from importlib import import_module
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QMessageBox
+    QApplication, QWidget, QPushButton, QVBoxLayout, QLabel, QMessageBox, QProgressDialog
 )
 from PySide6.QtCore import QTimer, QObject, Signal, Slot, Qt
 
@@ -30,17 +30,20 @@ class UpdateUIBridge(QObject):
     requestInfo = Signal(str)
     requestError = Signal(str)
     requestSetVersion = Signal(str)
+    requestProgress = Signal(str, int, int, bool)
 
     def __init__(self, version_label: QLabel):
         super().__init__()
         self._prompt_event = None
         self._prompt_answer = False
         self.version_label = version_label
+        self._progress_dialog = None
 
         self.requestPrompt.connect(self._onPrompt, Qt.QueuedConnection)
         self.requestInfo.connect(self._onInfo, Qt.QueuedConnection)
         self.requestError.connect(self._onError, Qt.QueuedConnection)
         self.requestSetVersion.connect(self._onSetVersion, Qt.QueuedConnection)
+        self.requestProgress.connect(self._onProgress, Qt.QueuedConnection)
 
     @Slot(str)
     def _onPrompt(self, question: str):
@@ -66,6 +69,34 @@ class UpdateUIBridge(QObject):
     def _onSetVersion(self, ver: str):
         self.version_label.setText(f"Verzió: {ver}")
 
+    @Slot(str, int, int, bool)
+    def _onProgress(self, label: str, current: int, total: int, done: bool):
+        if done:
+            if self._progress_dialog is not None:
+                self._progress_dialog.close()
+                self._progress_dialog.deleteLater()
+                self._progress_dialog = None
+            return
+
+        if self._progress_dialog is None:
+            dlg = QProgressDialog("Frissites folyamatban...", None, 0, 100)
+            dlg.setWindowTitle("Frissites")
+            dlg.setWindowModality(Qt.ApplicationModal)
+            dlg.setMinimumDuration(0)
+            dlg.setAutoClose(False)
+            dlg.setAutoReset(False)
+            dlg.setCancelButton(None)
+            self._progress_dialog = dlg
+
+        if total and total > 0:
+            self._progress_dialog.setRange(0, total)
+            self._progress_dialog.setValue(min(current, total))
+        else:
+            self._progress_dialog.setRange(0, 0)
+
+        if label:
+            self._progress_dialog.setLabelText(label)
+
     def ui_prompt(self, question: str) -> bool:
         self._prompt_event = threading.Event()
         self.requestPrompt.emit(question)
@@ -80,6 +111,9 @@ class UpdateUIBridge(QObject):
 
     def ui_set_version(self, version_tag: str):
         self.requestSetVersion.emit(version_tag or "ismeretlen")
+
+    def ui_progress(self, label: str, current: int, total: int, done: bool):
+        self.requestProgress.emit(label or "", int(current or 0), int(total or 0), bool(done))
 
 
 _update_bridge = None
@@ -101,6 +135,7 @@ def start_auto_update(version_label: QLabel):
         ui_info=_update_bridge.ui_info,
         ui_error=_update_bridge.ui_error,
         ui_set_version=_update_bridge.ui_set_version,
+        ui_progress=_update_bridge.ui_progress,
         run_in_thread=True,
         delay_seconds=1.0
     )
