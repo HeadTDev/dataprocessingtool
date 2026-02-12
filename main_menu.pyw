@@ -12,7 +12,7 @@ BUTTON_SIZE = (300, 40)
 
 def resource_path(*parts: str) -> str:
     """
-    Erőforrás elérés fejlesztői és becsomagolt (PyInstaller) futásnál is.
+    Erőforrás elérés fejlesztői és becsomagolt (PyInstaller) futásnál is.x
     """
     base = getattr(sys, "_MEIPASS", None)
     if base:
@@ -130,6 +130,7 @@ class MainMenu(QWidget):
             ("📂 Vonalkód PDF Másolás", "barcode_pdf_masolas"),
             ("📚 Cofanet Help", "cofanet_help"),
             ("🔧 KSH Iparági Értékesítés", "ksh_iparagi_ertekesites"),
+            ("🖱️ Mouse Mover", "mouse_mover")
         ]
 
         for text, pkg in buttons:
@@ -199,6 +200,7 @@ if False:
     import cofanet_help.run         # noqa: F401
     import ksh_iparagi_ertekesites.run  # noqa: F401
     import merkantil_pdf_feldolgozo.run # noqa: F401
+    import mouse_mover.run  # noqa: F401
 
 
 if __name__ == "__main__":
