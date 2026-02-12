@@ -22,6 +22,7 @@ DEBUG = True
 ALLOW_ZIP_FALLBACK = True
 INCREMENTAL_DEFAULT = True   # ha van commit összehasonlítási alap
 INITIALIZE_WITHOUT_FORCE_DOWNLOAD = True  # első futásnál (nincs version.json) ne töltsön, csak inicializáljon
+ALLOW_PRERELEASES = False
 
 MAX_BODY_SNIPPET = 400  # promptban ennyire vágjuk a release body-t
 
@@ -98,6 +99,15 @@ def http_get_bytes(url: str):
 
 
 def get_latest_release():
+    url = f"https://api.github.com/repos/{OWNER}/{REPO}/releases?per_page=10"
+    data = http_get_json(url)
+    if isinstance(data, list):
+        for rel in data:
+            if rel.get("draft"):
+                continue
+            if rel.get("prerelease") and not ALLOW_PRERELEASES:
+                continue
+            return rel
     url = f"https://api.github.com/repos/{OWNER}/{REPO}/releases/latest"
     return http_get_json(url)  # tartalmaz: tag_name, name, body, zipball_url, target_commitish, etc.
 
