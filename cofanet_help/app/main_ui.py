@@ -11,13 +11,14 @@ from .coface_copy import fill_coface_excel_and_open
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from theme import get_dark_theme_stylesheet, get_action_button_stylesheet, get_browse_button_stylesheet
+from utils import resource_path
 
 class CofanetHelpUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cofanet Help")
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "coface_icon.png")))
-        self.setMinimumWidth(300)
+        self.setWindowIcon(QIcon(resource_path("icons", "coface_icon.png")))
+        self.setMinimumWidth(320)
         self.setMinimumHeight(280)
 
         self.sap_path_input = QLineEdit()

@@ -10,13 +10,14 @@ from .barcode_copier import copy_matching_pdfs
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from theme import get_dark_theme_stylesheet, get_action_button_stylesheet, get_browse_button_stylesheet
+from utils import resource_path
 
 class BarcodeCopierWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Vonalkód alapú PDF másoló")
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "pdf_icon.png")))
-        self.setMinimumWidth(280)
+        self.setWindowIcon(QIcon(resource_path("icons", "pdf_icon.png")))
+        self.setMinimumWidth(320)
         self.setMinimumHeight(220)
 
         self.excel_path_input = QLineEdit()

@@ -9,20 +9,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QTimer, QObject, Signal, Slot, Qt
 
 from theme import get_dark_theme_stylesheet, get_action_button_stylesheet
+from utils import resource_path
 
 BUTTON_SIZE = (300, 40)
-
-def resource_path(*parts: str) -> str:
-    """
-    Erőforrás elérés fejlesztői és becsomagolt (PyInstaller) futásnál is.x
-    """
-    base = getattr(sys, "_MEIPASS", None)
-    if base:
-        import os
-        return os.path.join(base, *parts)
-    import os
-    here = os.path.abspath(os.path.dirname(__file__))
-    return os.path.join(here, *parts)
 
 
 class UpdateUIBridge(QObject):
@@ -145,7 +134,7 @@ class MainMenu(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Főmenü")
-        self.setWindowIcon(QIcon(resource_path("synthwave_icon.png")))
+        self.setWindowIcon(QIcon(resource_path("icons", "synthwave_icon.png")))
         self.setMinimumSize(320, 220)
         self.version_label = QLabel("Verzió: betöltés...")
         f = self.version_label.font()

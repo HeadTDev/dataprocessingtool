@@ -10,13 +10,14 @@ from .process import Processor
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from theme import get_dark_theme_stylesheet, get_action_button_stylesheet, get_browse_button_stylesheet
+from utils import resource_path
 
 class MainUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("KSH + Matstamm egyesítő")
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "ksh_icon.png")))
-        self.setMinimumWidth(280)
+        self.setWindowIcon(QIcon(resource_path("icons", "ksh_icon.png")))
+        self.setMinimumWidth(320)
         self.setMinimumHeight(210)
 
         self.ksh_input = QLineEdit()

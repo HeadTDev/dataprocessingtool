@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 
 from .mover import CursorMover, MoveSettings
 
@@ -17,12 +17,14 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from theme import get_dark_theme_stylesheet, get_action_button_stylesheet
+from utils import resource_path
 
 
 class MainUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🖱️ Mouse Mover")
+        self.setWindowIcon(QIcon(resource_path("icons", "mouse_icon.png")))
         self.setMinimumWidth(320)
         self.setMinimumHeight(420)
 
