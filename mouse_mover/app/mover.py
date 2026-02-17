@@ -64,8 +64,9 @@ class CursorMover(QObject):
             return
 
         x, y = self._path[self._index]
-        _set_cursor_pos(x, y)
-        self._last_auto_pos = (x, y)
+        _send_mouse_move(x, y)
+        # Read back actual position – SendInput normalisation may round coords
+        self._last_auto_pos = _get_cursor_pos()
         self._index += 1
 
         jitter = random.uniform(0.8, 1.2)
@@ -98,7 +99,7 @@ class CursorMover(QObject):
             return
         x, y = _get_cursor_pos()
         lx, ly = self._last_auto_pos
-        if abs(x - lx) > 2 or abs(y - ly) > 2:
+        if abs(x - lx) > 5 or abs(y - ly) > 5:
             self.stop()
             self.userInterruption.emit()
 
@@ -121,9 +122,43 @@ class CursorMover(QObject):
         self._index = 0
 
 
+# ---------------------------------------------------------------------------
+# Win32 structs & constants for SendInput  (mouse)
+# ---------------------------------------------------------------------------
+INPUT_MOUSE = 0
+MOUSEEVENTF_MOVE = 0x0001
+MOUSEEVENTF_ABSOLUTE = 0x8000
+
+
 class _Point(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
+
+class _MouseInput(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+
+class _InputUnion(ctypes.Union):
+    _fields_ = [("mi", _MouseInput)]
+
+
+class _Input(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_ulong),
+        ("u", _InputUnion),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Low-level helpers
+# ---------------------------------------------------------------------------
 
 def _get_cursor_pos() -> tuple[int, int]:
     pt = _Point()
@@ -131,14 +166,38 @@ def _get_cursor_pos() -> tuple[int, int]:
     return int(pt.x), int(pt.y)
 
 
-def _set_cursor_pos(x: int, y: int) -> None:
-    ctypes.windll.user32.SetCursorPos(int(x), int(y))
-
-
 def _screen_size() -> tuple[int, int]:
     width = ctypes.windll.user32.GetSystemMetrics(0)
     height = ctypes.windll.user32.GetSystemMetrics(1)
     return int(width), int(height)
+
+
+def _send_mouse_move(x: int, y: int) -> None:
+    """Move the cursor via SendInput so the OS idle timer resets.
+
+    This is the key difference vs. SetCursorPos:
+    SendInput injects a real input event into the OS input queue,
+    which updates GetLastInputInfo() and keeps applications like
+    Microsoft Teams from marking the user as 'Away'.
+    """
+    sw, sh = _screen_size()
+    # Normalise pixel coords to 0-65535 range required by ABSOLUTE mode
+    norm_x = int(x * 65536 / sw) + 1
+    norm_y = int(y * 65536 / sh) + 1
+
+    mi = _MouseInput()
+    mi.dx = norm_x
+    mi.dy = norm_y
+    mi.mouseData = 0
+    mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE
+    mi.time = 0
+    mi.dwExtraInfo = None
+
+    inp = _Input()
+    inp.type = INPUT_MOUSE
+    inp.u.mi = mi
+
+    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(_Input))
 
 
 def _pick_target(start_x: int, start_y: int, settings: MoveSettings) -> tuple[int, int]:
