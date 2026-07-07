@@ -1,7 +1,6 @@
 import os
 import sys
 
-from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -10,7 +9,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressDialog,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -19,7 +17,7 @@ from PySide6.QtWidgets import (
 from .barcode_copier import copy_matching_pdfs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from background_worker import BackgroundWorker
+from background_task import BackgroundTask
 from theme import (
     get_action_button_stylesheet,
     get_browse_button_stylesheet,
@@ -91,9 +89,7 @@ class BarcodeCopierWindow(QWidget):
         self.setLayout(layout)
         self.setStyleSheet(get_dark_theme_stylesheet())
 
-        self._copy_thread = None
-        self._copy_worker = None
-        self._progress_dialog = None
+        self._copy_task = None
 
     def _create_row(self, label_text, input_widget, button_widget):
         row = QHBoxLayout()
@@ -136,47 +132,19 @@ class BarcodeCopierWindow(QWidget):
             QMessageBox.warning(self, "Hiányzó kimenet", "Válassz kimeneti mappát.")
             return
 
-        self.copy_btn.setEnabled(False)
-        self._progress_dialog = QProgressDialog("Előkészítés...", "Mégse", 0, 100, self)
-        self._progress_dialog.setWindowTitle("PDF másolás")
-        self._progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self._progress_dialog.setMinimumDuration(0)
-        self._progress_dialog.setAutoClose(False)
-        self._progress_dialog.setAutoReset(False)
-
-        self._copy_thread = QThread(self)
-        self._copy_worker = BackgroundWorker(
+        self._copy_task = BackgroundTask(
+            self,
+            self.copy_btn,
+            "PDF másolás",
             copy_matching_pdfs,
-            excel_path,
-            pdf_folder,
-            output_folder,
+            (excel_path, pdf_folder, output_folder),
+            self._on_copy_result,
+            self._on_copy_error,
+            self._on_copy_finished,
         )
-        self._copy_worker.moveToThread(self._copy_thread)
-
-        self._copy_thread.started.connect(self._copy_worker.run)
-        self._copy_worker.progress.connect(self._on_copy_progress)
-        self._copy_worker.result.connect(self._on_copy_result)
-        self._copy_worker.error.connect(self._on_copy_error)
-        self._copy_worker.finished.connect(self._copy_thread.quit)
-        self._copy_worker.finished.connect(self._copy_worker.deleteLater)
-        self._copy_thread.finished.connect(self._copy_thread.deleteLater)
-        self._copy_thread.finished.connect(self._on_copy_finished)
-        self._progress_dialog.canceled.connect(self._copy_worker.request_cancel)
-
-        self._copy_thread.start()
-
-    def _on_copy_progress(self, message, current, total):
-        if self._progress_dialog is None:
-            return
-        if total > 0:
-            self._progress_dialog.setRange(0, total)
-            self._progress_dialog.setValue(current)
-        else:
-            self._progress_dialog.setRange(0, 0)
-        self._progress_dialog.setLabelText(message)
+        self._copy_task.start()
 
     def _on_copy_result(self, result):
-        self._close_progress_dialog()
         copied = result.get("copied_count", 0)
         missing = result.get("missing_count", 0)
         if result.get("cancelled"):
@@ -193,7 +161,6 @@ class BarcodeCopierWindow(QWidget):
         )
 
     def _on_copy_error(self, error_message):
-        self._close_progress_dialog()
         QMessageBox.critical(
             self,
             "Hiba",
@@ -201,18 +168,9 @@ class BarcodeCopierWindow(QWidget):
         )
 
     def _on_copy_finished(self):
-        self.copy_btn.setEnabled(True)
-        self._copy_thread = None
-        self._copy_worker = None
-        self._close_progress_dialog()
-
-    def _close_progress_dialog(self):
-        if self._progress_dialog is not None:
-            self._progress_dialog.close()
-            self._progress_dialog.deleteLater()
-            self._progress_dialog = None
+        self._copy_task = None
 
     def closeEvent(self, event):
-        if self._copy_worker is not None:
-            self._copy_worker.request_cancel()
+        if self._copy_task is not None:
+            self._copy_task.cancel()
         event.accept()

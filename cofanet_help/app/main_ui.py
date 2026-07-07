@@ -1,7 +1,6 @@
 import os
 import sys
 
-from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -10,7 +9,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressDialog,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -19,7 +17,7 @@ from PySide6.QtWidgets import (
 from .processor import process_cofanet_files
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from background_worker import BackgroundWorker
+from background_task import BackgroundTask
 from theme import (
     get_action_button_stylesheet,
     get_browse_button_stylesheet,
@@ -93,9 +91,7 @@ class CofanetHelpUI(QWidget):
         self.setLayout(layout)
         self.setStyleSheet(get_dark_theme_stylesheet())
 
-        self._process_thread = None
-        self._process_worker = None
-        self._progress_dialog = None
+        self._process_task = None
 
     def _create_row(self, label_text, input_widget, button_widget):
         row = QHBoxLayout()
@@ -154,48 +150,19 @@ class CofanetHelpUI(QWidget):
             )
             return
 
-        self.process_btn.setEnabled(False)
-        self._progress_dialog = QProgressDialog("Előkészítés...", "Mégse", 0, 100, self)
-        self._progress_dialog.setWindowTitle("Cofanet feldolgozás")
-        self._progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self._progress_dialog.setMinimumDuration(0)
-        self._progress_dialog.setAutoClose(False)
-        self._progress_dialog.setAutoReset(False)
-
-        self._process_thread = QThread(self)
-        self._process_worker = BackgroundWorker(
+        self._process_task = BackgroundTask(
+            self,
+            self.process_btn,
+            "Cofanet feldolgozás",
             process_cofanet_files,
-            sap_path,
-            coface_excel_path,
-            eur_rate,
-            save_path,
+            (sap_path, coface_excel_path, eur_rate, save_path),
+            self._on_process_result,
+            self._on_process_error,
+            self._on_process_finished,
         )
-        self._process_worker.moveToThread(self._process_thread)
-
-        self._process_thread.started.connect(self._process_worker.run)
-        self._process_worker.progress.connect(self._on_process_progress)
-        self._process_worker.result.connect(self._on_process_result)
-        self._process_worker.error.connect(self._on_process_error)
-        self._process_worker.finished.connect(self._process_thread.quit)
-        self._process_worker.finished.connect(self._process_worker.deleteLater)
-        self._process_thread.finished.connect(self._process_thread.deleteLater)
-        self._process_thread.finished.connect(self._on_process_finished)
-        self._progress_dialog.canceled.connect(self._process_worker.request_cancel)
-
-        self._process_thread.start()
-
-    def _on_process_progress(self, message, current, total):
-        if self._progress_dialog is None:
-            return
-        if total > 0:
-            self._progress_dialog.setRange(0, total)
-            self._progress_dialog.setValue(current)
-        else:
-            self._progress_dialog.setRange(0, 0)
-        self._progress_dialog.setLabelText(message)
+        self._process_task.start()
 
     def _on_process_result(self, result):
-        self._close_progress_dialog()
         if result.get("cancelled"):
             QMessageBox.information(self, "Megszakítva", "A feldolgozás megszakítva.")
             return
@@ -212,20 +179,10 @@ class CofanetHelpUI(QWidget):
             self._open_output_file(coface_output_path)
 
     def _on_process_error(self, error_message):
-        self._close_progress_dialog()
         QMessageBox.critical(self, "Hiba", f"Hiba történt: {error_message}")
 
     def _on_process_finished(self):
-        self.process_btn.setEnabled(True)
-        self._process_thread = None
-        self._process_worker = None
-        self._close_progress_dialog()
-
-    def _close_progress_dialog(self):
-        if self._progress_dialog is not None:
-            self._progress_dialog.close()
-            self._progress_dialog.deleteLater()
-            self._progress_dialog = None
+        self._process_task = None
 
     def _open_output_file(self, output_path):
         try:
@@ -239,6 +196,6 @@ class CofanetHelpUI(QWidget):
             pass
 
     def closeEvent(self, event):
-        if self._process_worker is not None:
-            self._process_worker.request_cancel()
+        if self._process_task is not None:
+            self._process_task.cancel()
         event.accept()
