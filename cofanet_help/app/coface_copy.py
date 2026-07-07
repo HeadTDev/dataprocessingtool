@@ -1,23 +1,28 @@
-import os
 import csv
+import os
+import re
 import sys
 import unicodedata
-import re
 from difflib import SequenceMatcher
+
 from openpyxl import load_workbook
 from openpyxl.styles import numbers
+
 
 def normalize_name(name):
     if not name:
         return ""
-    name = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode()
+    name = unicodedata.normalize("NFKD", name).encode("ASCII", "ignore").decode()
     name = name.lower()
     name = re.sub(
-        r'\b(kft\.?|zrt\.?|bt\.?|gmbh|ltd\.?|nyrt\.?|rt\.?|b\.v\.?|s\.a\.?|s\.r\.l\.?|se|ev|sas|korlatolt felelossegu tarsasag|szolgaltato|kereskedelmi|beteti tarsasag|nonprofit)\b',
-        '', name)
-    name = re.sub(r'[^a-z0-9]', ' ', name)
-    name = re.sub(r'\s+', ' ', name).strip()
+        r"\b(kft\.?|zrt\.?|bt\.?|gmbh|ltd\.?|nyrt\.?|rt\.?|b\.v\.?|s\.a\.?|s\.r\.l\.?|se|ev|sas|korlatolt felelossegu tarsasag|szolgaltato|kereskedelmi|beteti tarsasag|nonprofit)\b",
+        "",
+        name,
+    )
+    name = re.sub(r"[^a-z0-9]", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
     return name
+
 
 def best_fuzzy_match(vevo_name, coface_names, threshold=0.80):
     norm_vevo = normalize_name(vevo_name)
@@ -36,6 +41,7 @@ def best_fuzzy_match(vevo_name, coface_names, threshold=0.80):
         return best_idx
     return None
 
+
 def format_amount(amount_str):
     """
     Formázza az összeget helyes számformátumra:
@@ -46,13 +52,13 @@ def format_amount(amount_str):
     if not amount_str:
         return None, ""
     amt = amount_str.replace(" ", "")
-    if ',' in amt and amt.count(',') == 1:
-        amt = amt.replace('.', '')
-        amt = amt.replace(',', '.')
-    elif amt.count('.') > 1 and ',' not in amt:
-        parts = amt.split('.')
+    if "," in amt and amt.count(",") == 1:
+        amt = amt.replace(".", "")
+        amt = amt.replace(",", ".")
+    elif amt.count(".") > 1 and "," not in amt:
+        parts = amt.split(".")
         tizedes = parts[-1]
-        amt = ''.join(parts[:-1]) + '.' + tizedes
+        amt = "".join(parts[:-1]) + "." + tizedes
     try:
         num = float(amt)
         # Sztring formázás: 1,234,567.89
@@ -60,6 +66,7 @@ def format_amount(amount_str):
         return num, str_formatted
     except Exception:
         return None, amount_str
+
 
 def find_row_for_company(vevo_name, coface_names):
     vevo_name_lower = vevo_name.lower().strip()
@@ -76,10 +83,24 @@ def find_row_for_company(vevo_name, coface_names):
             return idx
     return None
 
-def fill_coface_excel_and_open(coface_excel_path, vevok_csv_path, save_path=None):
+
+def fill_coface_excel_and_open(
+    coface_excel_path,
+    vevok_csv_path,
+    save_path=None,
+    progress_callback=None,
+    is_cancelled=None,
+    open_file=True,
+):
     with open(vevok_csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        vevok_data = [(row.get("Vevő", "").strip(), row.get("Forintosítva HUF", "")) for row in reader]
+        vevok_data = [
+            (row.get("Vevő", "").strip(), row.get("Forintosítva HUF", ""))
+            for row in reader
+        ]
+
+    if progress_callback:
+        progress_callback("Coface Excel megnyitása...", 0, 0)
 
     wb = load_workbook(coface_excel_path)
     ws = wb.active
@@ -98,14 +119,17 @@ def fill_coface_excel_and_open(coface_excel_path, vevok_csv_path, save_path=None
     cegnev_col = header.index("Cégnév")
     osszeg_col = header.index("Számlázott összeg")
 
-    coface_rows = list(ws.iter_rows(min_row=header_row_idx+1, max_row=ws.max_row))
-    coface_names = [
-        str(row[cegnev_col].value or "").strip()
-        for row in coface_rows
-    ]
+    coface_rows = list(ws.iter_rows(min_row=header_row_idx + 1, max_row=ws.max_row))
+    coface_names = [str(row[cegnev_col].value or "").strip() for row in coface_rows]
 
     from openpyxl.cell.cell import MergedCell
-    for vevo_name, amount in vevok_data:
+
+    total_vevok = len(vevok_data)
+    for index, (vevo_name, amount) in enumerate(vevok_data, start=1):
+        if is_cancelled and is_cancelled():
+            raise InterruptedError("A feldolgozás megszakítva.")
+        if progress_callback:
+            progress_callback("Coface cégek párosítása...", index, total_vevok)
         if not vevo_name:
             continue
         idx = find_row_for_company(vevo_name, coface_names)
@@ -116,24 +140,31 @@ def fill_coface_excel_and_open(coface_excel_path, vevok_csv_path, save_path=None
                 num_value, str_formatted = format_amount(amount)
                 if num_value is not None:
                     cell.value = num_value
-                    cell.number_format = numbers.FORMAT_NUMBER_COMMA_SEPARATED1  # '1,234,567.89'
+                    cell.number_format = (
+                        numbers.FORMAT_NUMBER_COMMA_SEPARATED1
+                    )  # '1,234,567.89'
                 else:
                     cell.value = amount
 
     # --- MENTÉS FELHASZNÁLÓ ÁLTAL VÁLASZTOTT HELYRE ---
     if save_path is None:
-        output_path = os.path.join(os.path.dirname(coface_excel_path), "coface_output.xlsx")
+        output_path = os.path.join(
+            os.path.dirname(coface_excel_path), "coface_output.xlsx"
+        )
     else:
         output_path = save_path
+    if progress_callback:
+        progress_callback("Coface Excel mentése...", 0, 0)
     wb.save(output_path)
-    try:
-        if sys.platform.startswith('darwin'):
-            os.system(f'open "{output_path}"')
-        elif os.name == 'nt':
-            os.startfile(output_path)
-        else:
-            os.system(f'xdg-open "{output_path}"')
-    except Exception:
-        pass
+    if open_file:
+        try:
+            if sys.platform.startswith("darwin"):
+                os.system(f'open "{output_path}"')
+            elif os.name == "nt":
+                os.startfile(output_path)
+            else:
+                os.system(f'xdg-open "{output_path}"')
+        except Exception:
+            pass
 
     return output_path

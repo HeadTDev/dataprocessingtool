@@ -1,17 +1,32 @@
 import os
+import sys
+
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
-    QVBoxLayout, QHBoxLayout, QMessageBox, QGroupBox
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressDialog,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt
-from .extract_data import extract_invoice_summary
-from .coface_copy import fill_coface_excel_and_open
 
-import sys
+from .processor import process_cofanet_files
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from theme import get_dark_theme_stylesheet, get_action_button_stylesheet, get_browse_button_stylesheet
+from background_worker import BackgroundWorker
+from theme import (
+    get_action_button_stylesheet,
+    get_browse_button_stylesheet,
+    get_dark_theme_stylesheet,
+)
 from utils import resource_path
+
 
 class CofanetHelpUI(QWidget):
     def __init__(self):
@@ -50,8 +65,14 @@ class CofanetHelpUI(QWidget):
         # Grouping
         input_group = QGroupBox("📁 Bemeneti fájlok")
         input_layout = QVBoxLayout()
-        input_layout.addLayout(self._create_row("SAP input:", self.sap_path_input, self.sap_browse_btn))
-        input_layout.addLayout(self._create_row("Coface Excel:", self.coface_excel_input, self.coface_browse_btn))
+        input_layout.addLayout(
+            self._create_row("SAP input:", self.sap_path_input, self.sap_browse_btn)
+        )
+        input_layout.addLayout(
+            self._create_row(
+                "Coface Excel:", self.coface_excel_input, self.coface_browse_btn
+            )
+        )
         input_group.setLayout(input_layout)
 
         config_group = QGroupBox("⚙️ Beállítások")
@@ -72,6 +93,10 @@ class CofanetHelpUI(QWidget):
         self.setLayout(layout)
         self.setStyleSheet(get_dark_theme_stylesheet())
 
+        self._process_thread = None
+        self._process_worker = None
+        self._progress_dialog = None
+
     def _create_row(self, label_text, input_widget, button_widget):
         row = QHBoxLayout()
         row.addWidget(QLabel(label_text), 0)
@@ -80,82 +105,140 @@ class CofanetHelpUI(QWidget):
         return row
 
     def browse_sap(self):
-        path, _ = QFileDialog.getOpenFileName(self, "SAP input kiválasztása", "", "SAP Unicode Text export (*.xls *.txt *.csv)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "SAP input kiválasztása",
+            "",
+            "SAP Unicode Text export (*.xls *.txt *.csv)",
+        )
         if path:
             self.sap_path_input.setText(path)
 
     def browse_coface_excel(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Coface Excel kiválasztása", "", "Excel fájlok (*.xlsx *.xls)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Coface Excel kiválasztása", "", "Excel fájlok (*.xlsx *.xls)"
+        )
         if path:
             self.coface_excel_input.setText(path)
 
     def process_file(self):
-        sap_path = self.sap_path_input.text()
-        coface_excel_path = self.coface_excel_input.text()
-        eur_rate_str = self.eur_rate_input.text()
+        sap_path = self.sap_path_input.text().strip()
+        coface_excel_path = self.coface_excel_input.text().strip()
+        eur_rate_str = self.eur_rate_input.text().strip()
 
-        if not sap_path:
-            QMessageBox.warning(self, "Hiba", "Válassz SAP input fájlt!")
+        if not sap_path or not os.path.isfile(sap_path):
+            QMessageBox.warning(self, "Hiba", "Válassz létező SAP input fájlt!")
             return
-        if not coface_excel_path:
-            QMessageBox.warning(self, "Hiba", "Válassz Coface Excel fájlt!")
+        if not coface_excel_path or not os.path.isfile(coface_excel_path):
+            QMessageBox.warning(self, "Hiba", "Válassz létező Coface Excel fájlt!")
             return
         try:
-            eur_rate = float(eur_rate_str.replace(',', '.').strip())
+            eur_rate = float(eur_rate_str.replace(",", "."))
         except Exception:
-            QMessageBox.warning(self, "Hiba", "Kérlek, érvényes EUR árfolyamot adj meg (pl. 400)!")
+            QMessageBox.warning(
+                self, "Hiba", "Kérlek, érvényes EUR árfolyamot adj meg (pl. 400)!"
+            )
             return
 
-        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
-        os.makedirs(output_dir, exist_ok=True)
-
-        try:
-            summary_rows = extract_invoice_summary(sap_path)
-            summary_rows_sorted = sorted(summary_rows, key=lambda x: x["cegnev"].lower())
-            output_path = os.path.join(output_dir, "vevok.csv")
-            headers = [
-                "Vevő",
-                "Összeg BP-ben",
-                "BP pénznem",
-                "Összeg SP-ben",
-                "SP pénznem",
-                "Forintosítva HUF"
-            ]
-            import csv
-            with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(headers)
-                for row in summary_rows_sorted:
-                    osszeg_bp = row.get("osszeg_bp", "").replace('.', '').replace(',', '.')
-                    bp_penznem = row.get("bp_penznem", "").upper()
-                    try:
-                        osszeg_bp_float = float(osszeg_bp) if osszeg_bp else 0.0
-                    except Exception:
-                        osszeg_bp_float = 0.0
-                    if bp_penznem != "HUF":
-                        forintositva = osszeg_bp_float * eur_rate
-                        forintositva_str = f'{forintositva:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
-                    else:
-                        forintositva_str = row.get("osszeg_bp", "")
-                    writer.writerow([
-                        row.get("cegnev", ""),
-                        row.get("osszeg_bp", ""),
-                        row.get("bp_penznem", ""),
-                        row.get("osszeg_sp", ""),
-                        row.get("sp_penznem", ""),
-                        forintositva_str
-                    ])
-            # Mentési hely kiválasztása
-            save_path, _ = QFileDialog.getSaveFileName(self, "Mentés kitöltött Coface Excelként", "coface_output.xlsx", "Excel fájlok (*.xlsx)")
-            if not save_path:
-                QMessageBox.information(self, "Mentés megszakítva", "A kitöltött Excel mentése megszakítva lett.")
-                return
-            coface_output_path = fill_coface_excel_and_open(coface_excel_path, output_path, save_path=save_path)
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Mentés kitöltött Coface Excelként",
+            "coface_output.xlsx",
+            "Excel fájlok (*.xlsx)",
+        )
+        if not save_path:
             QMessageBox.information(
                 self,
-                "Sikeres feldolgozás",
-                f"Sikeres feldolgozás! {len(summary_rows_sorted)} vevő sor írva: output/vevok.csv\n"
-                f"Coface Excel kitöltve: {coface_output_path}"
+                "Mentés megszakítva",
+                "A kitöltött Excel mentése megszakítva lett.",
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Hiba", f"Hiba történt: {e}")
+            return
+
+        self.process_btn.setEnabled(False)
+        self._progress_dialog = QProgressDialog("Előkészítés...", "Mégse", 0, 100, self)
+        self._progress_dialog.setWindowTitle("Cofanet feldolgozás")
+        self._progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress_dialog.setMinimumDuration(0)
+        self._progress_dialog.setAutoClose(False)
+        self._progress_dialog.setAutoReset(False)
+
+        self._process_thread = QThread(self)
+        self._process_worker = BackgroundWorker(
+            process_cofanet_files,
+            sap_path,
+            coface_excel_path,
+            eur_rate,
+            save_path,
+        )
+        self._process_worker.moveToThread(self._process_thread)
+
+        self._process_thread.started.connect(self._process_worker.run)
+        self._process_worker.progress.connect(self._on_process_progress)
+        self._process_worker.result.connect(self._on_process_result)
+        self._process_worker.error.connect(self._on_process_error)
+        self._process_worker.finished.connect(self._process_thread.quit)
+        self._process_worker.finished.connect(self._process_worker.deleteLater)
+        self._process_thread.finished.connect(self._process_thread.deleteLater)
+        self._process_thread.finished.connect(self._on_process_finished)
+        self._progress_dialog.canceled.connect(self._process_worker.request_cancel)
+
+        self._process_thread.start()
+
+    def _on_process_progress(self, message, current, total):
+        if self._progress_dialog is None:
+            return
+        if total > 0:
+            self._progress_dialog.setRange(0, total)
+            self._progress_dialog.setValue(current)
+        else:
+            self._progress_dialog.setRange(0, 0)
+        self._progress_dialog.setLabelText(message)
+
+    def _on_process_result(self, result):
+        self._close_progress_dialog()
+        if result.get("cancelled"):
+            QMessageBox.information(self, "Megszakítva", "A feldolgozás megszakítva.")
+            return
+
+        coface_output_path = result.get("coface_output_path")
+        rows_count = result.get("rows_count", 0)
+        QMessageBox.information(
+            self,
+            "Sikeres feldolgozás",
+            f"Sikeres feldolgozás! {rows_count} vevő sor írva: output/vevok.csv\n"
+            f"Coface Excel kitöltve: {coface_output_path}",
+        )
+        if coface_output_path:
+            self._open_output_file(coface_output_path)
+
+    def _on_process_error(self, error_message):
+        self._close_progress_dialog()
+        QMessageBox.critical(self, "Hiba", f"Hiba történt: {error_message}")
+
+    def _on_process_finished(self):
+        self.process_btn.setEnabled(True)
+        self._process_thread = None
+        self._process_worker = None
+        self._close_progress_dialog()
+
+    def _close_progress_dialog(self):
+        if self._progress_dialog is not None:
+            self._progress_dialog.close()
+            self._progress_dialog.deleteLater()
+            self._progress_dialog = None
+
+    def _open_output_file(self, output_path):
+        try:
+            if sys.platform.startswith("darwin"):
+                os.system(f'open "{output_path}"')
+            elif os.name == "nt":
+                os.startfile(output_path)
+            else:
+                os.system(f'xdg-open "{output_path}"')
+        except Exception:
+            pass
+
+    def closeEvent(self, event):
+        if self._process_worker is not None:
+            self._process_worker.request_cancel()
+        event.accept()

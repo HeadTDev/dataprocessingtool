@@ -1,33 +1,38 @@
 import re
 
-def extract_invoice_summary(filename):
+
+def extract_invoice_summary(filename, progress_callback=None, is_cancelled=None):
     """
     Csak a 'Név' és minden '** Számla' sort gyűjti ki.
     Minden '** Számla' sorhoz hozzárendeli a legutóbbi 'Név' értéket,
     és pontosan kiolvassa az összegeket a sor végéről.
     A 'praktiker' cégeket összevonja 'Praktiker Kft.' név alá, összegeiket összeadja.
     """
-    encodings = ['utf-16', 'utf-8']
+    encodings = ["utf-16", "utf-8"]
     results = []
     cegnev = None
 
-    nev_re = re.compile(r'^\s*Név\s+(.*)$')
-    szamla_re = re.compile(r'^\s*\*\*\s*Számla\s+(\d+)')
+    nev_re = re.compile(r"^\s*Név\s+(.*)$")
+    szamla_re = re.compile(r"^\s*\*\*\s*Számla\s+(\d+)")
     # Kifejezetten a sor végéről szedjük az összegeket és pénznemeket!
-    amounts_re = re.compile(r'([\d\.,]+)\s+(HUF|EUR)\s+([\d\.,]+)\s+(HUF|EUR)\s*$')
+    amounts_re = re.compile(r"([\d\.,]+)\s+(HUF|EUR)\s+([\d\.,]+)\s+(HUF|EUR)\s*$")
 
     for encoding in encodings:
         try:
             with open(filename, encoding=encoding) as f:
-                for line in f:
-                    line = line.rstrip('\n')
+                for line_number, line in enumerate(f, start=1):
+                    if is_cancelled and is_cancelled():
+                        raise InterruptedError("A feldolgozás megszakítva.")
+                    if progress_callback and line_number % 100 == 0:
+                        progress_callback("SAP adatok olvasása...", line_number, 0)
+                    line = line.rstrip("\n")
                     m_nev = nev_re.match(line)
                     if m_nev:
                         cegnev = m_nev.group(1).strip()
                         continue
                     m_szamla = szamla_re.match(line)
                     if m_szamla:
-                        m_amounts = amounts_re.search(line.replace('\t', ' '))
+                        m_amounts = amounts_re.search(line.replace("\t", " "))
                         if m_amounts:
                             osszeg_bp = m_amounts.group(1).strip()
                             bp_penznem = m_amounts.group(2).strip()
@@ -35,21 +40,30 @@ def extract_invoice_summary(filename):
                             sp_penznem = m_amounts.group(4).strip()
                         else:
                             osszeg_bp = bp_penznem = osszeg_sp = sp_penznem = ""
-                        results.append({
-                            "cegnev": cegnev if cegnev else "",
-                            "osszeg_bp": osszeg_bp,
-                            "bp_penznem": bp_penznem,
-                            "osszeg_sp": osszeg_sp,
-                            "sp_penznem": sp_penznem
-                        })
+                        results.append(
+                            {
+                                "cegnev": cegnev if cegnev else "",
+                                "osszeg_bp": osszeg_bp,
+                                "bp_penznem": bp_penznem,
+                                "osszeg_sp": osszeg_sp,
+                                "sp_penznem": sp_penznem,
+                            }
+                        )
             break
+        except InterruptedError:
+            raise
         except Exception:
             continue
 
     # PRAKTIKER összevonás
     praktiker_key = "Praktiker Kft."
     summarized = {}
-    for row in results:
+    total_results = len(results)
+    for index, row in enumerate(results, start=1):
+        if is_cancelled and is_cancelled():
+            raise InterruptedError("A feldolgozás megszakítva.")
+        if progress_callback:
+            progress_callback("SAP sorok összesítése...", index, total_results)
         company = row["cegnev"]
         is_praktiker = "praktiker" in company.lower()
         key = praktiker_key if is_praktiker else company
@@ -58,7 +72,7 @@ def extract_invoice_summary(filename):
         def to_float(val):
             if not val:
                 return 0.0
-            val = val.replace('.', '').replace(',', '.')
+            val = val.replace(".", "").replace(",", ".")
             try:
                 return float(val)
             except Exception:
@@ -70,7 +84,7 @@ def extract_invoice_summary(filename):
                 "osszeg_bp": 0.0,
                 "bp_penznem": row["bp_penznem"],
                 "osszeg_sp": 0.0,
-                "sp_penznem": row["sp_penznem"]
+                "sp_penznem": row["sp_penznem"],
             }
         summarized[key]["osszeg_bp"] += to_float(row["osszeg_bp"])
         summarized[key]["osszeg_sp"] += to_float(row["osszeg_sp"])
@@ -82,28 +96,33 @@ def extract_invoice_summary(filename):
 
     # Visszaalakítjuk magyar formátumra
     def format_hu(val):
-        return f'{val:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     output_rows = []
     for data in summarized.values():
-        output_rows.append({
-            "cegnev": data["cegnev"],
-            "osszeg_bp": format_hu(data["osszeg_bp"]),
-            "bp_penznem": data["bp_penznem"],
-            "osszeg_sp": format_hu(data["osszeg_sp"]),
-            "sp_penznem": data["sp_penznem"]
-        })
+        output_rows.append(
+            {
+                "cegnev": data["cegnev"],
+                "osszeg_bp": format_hu(data["osszeg_bp"]),
+                "bp_penznem": data["bp_penznem"],
+                "osszeg_sp": format_hu(data["osszeg_sp"]),
+                "sp_penznem": data["sp_penznem"],
+            }
+        )
 
     # Betűrendbe rendezés cégnév szerint
     output_rows.sort(key=lambda x: x["cegnev"].lower())
     return output_rows
 
+
 def write_vevok_csv(results, output_path):
     import csv
+
     with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=[
-            "cegnev", "osszeg_bp", "bp_penznem", "osszeg_sp", "sp_penznem"
-        ])
+        writer = csv.DictWriter(
+            csvfile,
+            fieldnames=["cegnev", "osszeg_bp", "bp_penznem", "osszeg_sp", "sp_penznem"],
+        )
         writer.writeheader()
         for row in results:
             writer.writerow(row)
