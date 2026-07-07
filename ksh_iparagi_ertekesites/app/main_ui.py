@@ -1,16 +1,32 @@
-from PySide6.QtWidgets import (
-    QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
-    QVBoxLayout, QHBoxLayout, QMessageBox, QGroupBox
-)
-from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt
 import os
+import sys
+
+from PySide6.QtCore import Qt, QThread
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressDialog,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
 from .process import Processor
 
-import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from theme import get_dark_theme_stylesheet, get_action_button_stylesheet, get_browse_button_stylesheet
+from background_worker import BackgroundWorker
+from theme import (
+    get_action_button_stylesheet,
+    get_browse_button_stylesheet,
+    get_dark_theme_stylesheet,
+)
 from utils import resource_path
+
 
 class MainUI(QWidget):
     def __init__(self):
@@ -58,6 +74,10 @@ class MainUI(QWidget):
         self.processor = Processor()
         self.setStyleSheet(get_dark_theme_stylesheet())
 
+        self._process_thread = None
+        self._process_worker = None
+        self._progress_dialog = None
+
     def _row(self, label_text, input_widget, button_widget):
         row = QHBoxLayout()
         row.setSpacing(8)
@@ -90,19 +110,94 @@ class MainUI(QWidget):
         ksh = self.ksh_input.text().strip()
         mat = self.mat_input.text().strip()
 
-        if not ksh:
-            QMessageBox.warning(self, "Hiányzó KSH", "Válaszd ki a KSH fájlt.")
+        if not ksh or not os.path.isfile(ksh):
+            QMessageBox.warning(self, "Hiányzó KSH", "Válassz létező KSH fájlt.")
             return
-        if not mat:
-            QMessageBox.warning(self, "Hiányzó Matstamm", "Válaszd ki a Matstamm fájlt.")
+        if not mat or not os.path.isfile(mat):
+            QMessageBox.warning(
+                self, "Hiányzó Matstamm", "Válassz létező Matstamm fájlt."
+            )
             return
 
-        try:
-            output_path = self.processor.process(ksh, mat)
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Kimeneti XLSX fájl mentése",
+            "data.xlsx",
+            "Excel fájlok (*.xlsx);;Minden fájl (*.*)",
+        )
+        if not save_path:
             QMessageBox.information(
-                self,
-                "Kész",
-                f"A feldolgozás elkészült.\nAz új fájl itt található:\n{output_path}"
+                self, "Mentés megszakítva", "A feldolgozás nem indult el."
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Hiba", f"Hiba történt:\n{e}")
+            return
+
+        self.process_btn.setEnabled(False)
+        self._progress_dialog = QProgressDialog("Előkészítés...", "Mégse", 0, 100, self)
+        self._progress_dialog.setWindowTitle("KSH feldolgozás")
+        self._progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress_dialog.setMinimumDuration(0)
+        self._progress_dialog.setAutoClose(False)
+        self._progress_dialog.setAutoReset(False)
+
+        self._process_thread = QThread(self)
+        self._process_worker = BackgroundWorker(
+            self.processor.process, ksh, mat, save_path
+        )
+        self._process_worker.moveToThread(self._process_thread)
+
+        self._process_thread.started.connect(self._process_worker.run)
+        self._process_worker.progress.connect(self._on_process_progress)
+        self._process_worker.result.connect(self._on_process_result)
+        self._process_worker.error.connect(self._on_process_error)
+        self._process_worker.finished.connect(self._process_thread.quit)
+        self._process_worker.finished.connect(self._process_worker.deleteLater)
+        self._process_thread.finished.connect(self._process_thread.deleteLater)
+        self._process_thread.finished.connect(self._on_process_finished)
+        self._progress_dialog.canceled.connect(self._process_worker.request_cancel)
+
+        self._process_thread.start()
+
+    def _on_process_progress(self, message, current, total):
+        if self._progress_dialog is None:
+            return
+        if total > 0:
+            self._progress_dialog.setRange(0, total)
+            self._progress_dialog.setValue(current)
+        else:
+            self._progress_dialog.setRange(0, 0)
+        self._progress_dialog.setLabelText(message)
+
+    def _on_process_result(self, result):
+        self._close_progress_dialog()
+        if result.get("cancelled"):
+            QMessageBox.information(self, "Megszakítva", "A feldolgozás megszakítva.")
+            return
+
+        output_path = result.get("output_path")
+        row_count = result.get("row_count", 0)
+        cleanup_message = result.get("cleanup_message", "")
+        message = f"A feldolgozás elkészült.\nFeldolgozott sorok: {row_count}\nAz új fájl itt található:\n{output_path}"
+        if cleanup_message:
+            message += f"\n{cleanup_message}"
+        QMessageBox.information(self, "Kész", message)
+
+    def _on_process_error(self, error_message):
+        self._close_progress_dialog()
+        QMessageBox.critical(self, "Hiba", f"Hiba történt:\n{error_message}")
+
+    def _on_process_finished(self):
+        self.process_btn.setEnabled(True)
+        self._process_thread = None
+        self._process_worker = None
+        self._close_progress_dialog()
+
+    def _close_progress_dialog(self):
+        if self._progress_dialog is not None:
+            self._progress_dialog.close()
+            self._progress_dialog.deleteLater()
+            self._progress_dialog = None
+
+    def closeEvent(self, event):
+        if self._process_worker is not None:
+            self._process_worker.request_cancel()
+        event.accept()
