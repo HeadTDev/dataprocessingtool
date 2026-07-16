@@ -397,3 +397,77 @@ def perform_update_flow(
         t.start()
     else:
         _work()
+
+
+def set_last_checked():
+    data = safe_json_load(VERSION_FILE)
+    data["last_checked"] = datetime.now(timezone.utc).isoformat()
+    tmp = VERSION_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, VERSION_FILE)
+
+
+def check_update_available(cache_hours=1.0):
+    local = read_local_version_info()
+    last_checked_str = safe_json_load(VERSION_FILE).get("last_checked", "")
+    local_tag = local.get("version") or ""
+    
+    if last_checked_str:
+        try:
+            last_checked = datetime.fromisoformat(last_checked_str)
+            if (datetime.now(timezone.utc) - last_checked).total_seconds() < cache_hours * 3600:
+                log("Rate limit: Nem telt el elég idő az utolsó ellenőrzés óta.")
+                return False, None
+        except Exception:
+            pass
+
+    try:
+        release = get_latest_release()
+    except Exception as e:
+        log(f"Frissítés keresés hiba: {e}")
+        return False, None
+        
+    remote_tag = release.get("tag_name") or ""
+    if not remote_tag:
+        return False, None
+        
+    if not local_tag and INITIALIZE_WITHOUT_FORCE_DOWNLOAD:
+        try:
+            remote_commit_sha = get_commit_sha_for_tag(remote_tag)
+            write_local_version(remote_tag, remote_commit_sha)
+        except Exception:
+            pass
+        return False, None
+
+    if local_tag != remote_tag:
+        return True, release
+        
+    return False, None
+
+
+def do_update(release, progress_cb=None):
+    local = read_local_version_info()
+    local_commit = local.get("commit") or ""
+    remote_tag = release.get("tag_name")
+    remote_commit_sha = get_commit_sha_for_tag(remote_tag)
+    
+    did_incremental = False
+    if local_commit:
+        try:
+            cmp_data = compare_commits(local_commit, remote_commit_sha)
+            ahead_by = cmp_data.get("ahead_by")
+            files = cmp_data.get("files", [])
+            if ahead_by and ahead_by > 0 and files:
+                apply_incremental_update(files, remote_commit_sha, progress_cb=progress_cb)
+                did_incremental = True
+        except Exception as e:
+            log(f"Inkrementális sikertelen: {e}")
+            
+    if not did_incremental:
+        zip_url = release.get("zipball_url")
+        if not zip_url:
+            raise RuntimeError("Nincs zipball_url")
+        download_release_zip(zip_url, progress_cb=progress_cb)
+        
+    write_local_version(remote_tag, remote_commit_sha)

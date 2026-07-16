@@ -1,8 +1,9 @@
 import sys
+import subprocess
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPixmap
-from PySide6.QtWidgets import QApplication, QSplashScreen
+from PySide6.QtWidgets import QApplication, QSplashScreen, QMessageBox
 
 from app.resources.resource_path import resource_path
 
@@ -10,28 +11,70 @@ from app.resources.resource_path import resource_path
 def main():
     qt_app = QApplication(sys.argv)
 
-    # Splash screen megjelenítése a nehéz importok előtt
     pixmap = QPixmap(resource_path("icons", "synthwave_icon.png")).scaled(
         250, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation
     )
     splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
     splash.setFont(QFont("Arial", 12, QFont.Bold))
     splash.show()
-    splash.showMessage("Indítás...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     
-    # GUI frissítése, hogy a splash screen azonnal kirajzolódjon
+    # 1. Lépés: Gyors frissítéskeresés
+    splash.showMessage("Frissítések keresése...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     qt_app.processEvents()
 
-    # Nehéz modulok beimportálása (pandas, PyPDF2 stb.)
-    from app.frontend.main_window import MainWindow, start_auto_update
+    from app.backend.services.update_service import check_update_available, set_last_checked, do_update
+    has_update, release = check_update_available(cache_hours=1.0)
+    set_last_checked()
+
+    if has_update:
+        splash.hide()  # Splash eltüntetése, amíg dönt a felhasználó
+        remote_tag = release.get("tag_name")
+        reply = QMessageBox.question(
+            None,
+            "Frissítés elérhető",
+            f"Új verzió érhető el: {remote_tag}\nSzeretnéd most letölteni és telepíteni?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            splash.show()
+            splash.showMessage("Frissítés letöltése... Kérlek várj.", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+            qt_app.processEvents()
+            
+            def splash_progress(label, current, total, done):
+                if done:
+                    return
+                if total and total > 0:
+                    pct = int((current / total) * 100)
+                    splash.showMessage(f"Letöltés... {pct}%", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+                else:
+                    splash.showMessage(f"{label} {current}", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+                qt_app.processEvents()
+
+            try:
+                do_update(release, progress_cb=splash_progress)
+                splash.showMessage("Újraindítás...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+                qt_app.processEvents()
+                
+                # 2. Lépés: Automatikus újraindítás a letöltött, friss kóddal
+                subprocess.Popen([sys.executable] + sys.argv)
+                sys.exit(0)
+            except Exception as e:
+                splash.hide()
+                QMessageBox.critical(None, "Hiba", f"Sikertelen frissítés:\n{e}")
+        
+        splash.show()
+
+    # 3. Lépés: Nehéz modulok beimportálása és alkalmazás indítása
+    splash.showMessage("Indítás...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    qt_app.processEvents()
+
+    from app.frontend.main_window import MainWindow
 
     window = MainWindow()
     window.show()
     
-    # Splash eltüntetése, ahogy a főablak megjelenik
     splash.finish(window)
-
-    QTimer.singleShot(500, lambda: start_auto_update(window.version_label))
     return qt_app.exec()
 
 
