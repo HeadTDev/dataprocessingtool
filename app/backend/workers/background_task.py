@@ -1,12 +1,12 @@
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import QObject, Qt, QThread
 from PySide6.QtWidgets import QProgressDialog, QWidget
 
 from app.backend.workers.background_worker import BackgroundWorker
 
 
-class BackgroundTask:
+class BackgroundTask(QObject):
     def __init__(
         self,
         parent: QWidget,
@@ -18,6 +18,7 @@ class BackgroundTask:
         on_error: Callable[[str], None],
         on_finished: Callable[[], None] | None = None,
     ):
+        super().__init__(parent)
         self.parent = parent
         self.button = button
         self.title = title
