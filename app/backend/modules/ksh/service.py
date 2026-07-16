@@ -2,11 +2,10 @@ import csv
 import shutil
 from pathlib import Path
 
-import openpyxl
-from openpyxl.styles import PatternFill
+import pandas as pd
+import xlsxwriter
 
 from app.config.paths import module_output_dir
-from openpyxl.utils import get_column_letter
 
 
 class Processor:
@@ -64,42 +63,34 @@ class Processor:
         data_rows = cleaned_rows[1:]
 
         if progress_callback:
-            progress_callback("Matstamm beolvasása...", 0, 0)
-        mat_lookup = {}
-        wb = openpyxl.load_workbook(matstamm_path, read_only=True, data_only=True)
-        ws = wb.active
-        if ws is None:
-            raise ValueError("A Matstamm fájlban nincs aktív munkalap.")
-
-        mat_header = [
-            str(cell.value).strip() if cell.value is not None else ""
-            for cell in next(ws.iter_rows(min_row=1, max_row=1))
-        ]
+            progress_callback("Matstamm beolvasása (Pandas + Calamine motorral)...", 0, 0)
+        
+        # PANDAS + CALAMINE OPTIMALIZÁCIÓ
         try:
-            anyag_idx = mat_header.index("Anyag")
-            beszerzes_idx = mat_header.index("Beszerzés fajtája")
-        except ValueError as e:
+            df_mat = pd.read_excel(
+                matstamm_path,
+                engine="calamine",
+                usecols=lambda x: str(x).strip() in ["Anyag", "Beszerzés fajtája"],
+                dtype=str,
+            )
+        except Exception as e:
+            raise ValueError(f"Hiba a Matstamm fájl beolvasásakor: {e}")
+
+        anyag_col = next((c for c in df_mat.columns if str(c).strip() == "Anyag"), None)
+        besz_col = next((c for c in df_mat.columns if str(c).strip() == "Beszerzés fajtája"), None)
+
+        if not anyag_col or not besz_col:
             raise ValueError(
                 "A Matstamm fájl fejlécében nem található 'Anyag' vagy 'Beszerzés fajtája' oszlop."
-            ) from e
+            )
 
-        for index, row in enumerate(ws.iter_rows(min_row=2), start=1):
-            self._raise_if_cancelled(is_cancelled)
-            if progress_callback and index % 500 == 0:
-                progress_callback("Matstamm sorok feldolgozása...", index, 0)
-            anyag = (
-                str(row[anyag_idx].value).strip()
-                if row[anyag_idx].value is not None
-                else ""
+        df_mat = df_mat.dropna(subset=[anyag_col])
+        mat_lookup = dict(
+            zip(
+                df_mat[anyag_col].astype(str).str.strip(),
+                df_mat[besz_col].fillna("").astype(str).str.strip(),
             )
-            beszerzes = (
-                str(row[beszerzes_idx].value).strip()
-                if row[beszerzes_idx].value is not None
-                else ""
-            )
-            if anyag:
-                mat_lookup[anyag] = beszerzes
-        wb.close()
+        )
 
         try:
             data_anyag_idx = header.index("Anyag")
@@ -115,7 +106,8 @@ class Processor:
         total_data_rows = len(data_rows)
         for index, row in enumerate(data_rows, start=1):
             self._raise_if_cancelled(is_cancelled)
-            if progress_callback:
+            # Ne floodoljuk a GUI-t másodpercenként 1000 eventtel, csak 10000 soronként szóljunk
+            if progress_callback and index % 10000 == 0:
                 progress_callback("KSH sorok kiegészítése...", index, total_data_rows)
             while len(row) < len(header):
                 row.append("")
@@ -186,7 +178,7 @@ class Processor:
         total_rows = len(new_data_rows)
         for index, row in enumerate(new_data_rows, start=1):
             self._raise_if_cancelled(is_cancelled)
-            if progress_callback:
+            if progress_callback and index % 10000 == 0:
                 progress_callback("Egyenleg számítása...", index, total_rows)
             while len(row) < len(new_header):
                 row.append("")
@@ -213,13 +205,24 @@ class Processor:
             writer.writerow(egysites_header)
             writer.writerows(egysites_data_rows)
 
+        final_output_path = Path(save_path) if save_path else output_xlsx_path
+
         if progress_callback:
-            progress_callback("XLSX létrehozása...", 0, 0)
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        if ws is None:
-            raise ValueError("Nem sikerült XLSX munkalapot létrehozni.")
-        ws.title = "Adatok"
+            progress_callback("XLSX írása (xlsxwriter)...", 0, 0)
+
+        # XLSXWRITER OPTIMALIZÁCIÓ
+        wb = xlsxwriter.Workbook(final_output_path)
+        ws = wb.add_worksheet("Adatok")
+
+        # Stílusok
+        yellow_format = wb.add_format({"bg_color": "#FFFF00"})
+
+        highlight_names = {"Forgalom", "Jóváírás", "Egyenleg", "Iparági értékesítés"}
+        highlight_cols = [
+            idx
+            for idx, name in enumerate(egysites_header)
+            if name.strip() in highlight_names
+        ]
 
         egyenleg_col_idx = None
         iparagi_col_idx = None
@@ -229,58 +232,52 @@ class Processor:
             if name.strip() == "Iparági értékesítés":
                 iparagi_col_idx = idx
 
-        ws.append(egysites_header)
-        for index, row in enumerate(egysites_data_rows, start=1):
+        # Oszlopszélességek mérése indulásként a fejlécek alapján
+        col_widths = [len(str(h)) for h in egysites_header]
+
+        # Fejléc írása
+        for col_num, col_name in enumerate(egysites_header):
+            if col_num in highlight_cols:
+                ws.write(0, col_num, col_name, yellow_format)
+            else:
+                ws.write(0, col_num, col_name)
+
+        # Adatok írása
+        for row_num, row_data in enumerate(egysites_data_rows, start=1):
             self._raise_if_cancelled(is_cancelled)
-            if progress_callback:
-                progress_callback("Excel sorok írása...", index, total_rows)
-            excel_row = []
-            for idx, cell in enumerate(row):
-                if idx == egyenleg_col_idx:
+            if progress_callback and row_num % 10000 == 0:
+                progress_callback("Excel sorok írása...", row_num, total_rows)
+            for col_num, cell_data in enumerate(row_data):
+                val_to_write = cell_data
+                if col_num == egyenleg_col_idx:
                     try:
-                        excel_row.append(round(float(cell), 2))
+                        val_to_write = round(float(cell_data), 2)
                     except Exception:
-                        excel_row.append(cell)
-                elif idx == iparagi_col_idx:
-                    excel_row.append(cell)
+                        pass
+                elif col_num != iparagi_col_idx:
+                    num = to_clean_float(cell_data)
+                    if num is not None:
+                        val_to_write = num
+                
+                # Max szélesség dinamikus frissítése
+                str_val = str(val_to_write) if val_to_write is not None else ""
+                if len(str_val) > col_widths[col_num]:
+                    col_widths[col_num] = len(str_val)
+                
+                # Cella írása
+                if col_num in highlight_cols:
+                    ws.write(row_num, col_num, val_to_write, yellow_format)
                 else:
-                    num = to_clean_float(cell)
-                    excel_row.append(num if num is not None else cell)
-            ws.append(excel_row)
+                    ws.write(row_num, col_num, val_to_write)
 
-        max_row = ws.max_row
-        ws.auto_filter.ref = ws.dimensions
+        # Autofilter felrakása
+        ws.autofilter(0, 0, len(egysites_data_rows), len(egysites_header) - 1)
 
-        highlight_names = ["Forgalom", "Jóváírás", "Egyenleg", "Iparági értékesítés"]
-        highlight_cols = [
-            idx + 1
-            for idx, name in enumerate(egysites_header)
-            if name.strip() in highlight_names
-        ]
+        # Oszlopszélességek alkalmazása a legvégén, egy lépésben
+        for col_num, width in enumerate(col_widths):
+            ws.set_column(col_num, col_num, width + 2)
 
-        yellow_fill = PatternFill(
-            start_color="FFFF00", end_color="FFFF00", fill_type="solid"
-        )
-        for col in highlight_cols:
-            self._raise_if_cancelled(is_cancelled)
-            for row_num in range(2, max_row + 1):
-                ws.cell(row=row_num, column=col).fill = yellow_fill
-
-        if progress_callback:
-            progress_callback("Oszlopszélességek beállítása...", 0, 0)
-        for col in ws.columns:
-            max_length = 0
-            column = get_column_letter(int(col[0].column or 1))
-            for cell in col:
-                cell_value = str(cell.value) if cell.value is not None else ""
-                if len(cell_value) > max_length:
-                    max_length = len(cell_value)
-            ws.column_dimensions[column].width = max_length + 2
-
-        final_output_path = Path(save_path) if save_path else output_xlsx_path
-        if progress_callback:
-            progress_callback("XLSX mentése...", 0, 0)
-        wb.save(final_output_path)
+        wb.close()
 
         cleanup_message = ""
         if save_path:
