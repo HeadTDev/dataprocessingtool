@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.backend.modules.merkantil.service import run
 from app.frontend.components.csv_viewer import CSVViewer
+from app.frontend.components.drag_drop_line_edit import DragDropLineEdit
 
 from app.backend.workers.background_task import BackgroundTask
 from app.frontend.theme import (
@@ -35,8 +35,8 @@ class MainUI(QWidget):
         self.setMinimumHeight(220)
 
         # PDF fájl sor
-        self.pdf_path_input = QLineEdit()
-        self.pdf_path_input.setPlaceholderText("PDF fájl elérési útja...")
+        self.pdf_path_input = DragDropLineEdit(allowed_extensions=[".pdf"])
+        self.pdf_path_input.setPlaceholderText("Húzd ide a PDF fájlt, vagy tallózz...")
         self.pdf_browse_btn = QPushButton("📂")
         self.pdf_browse_btn.setMaximumWidth(45)
         self.pdf_browse_btn.setToolTip("Tallózás a PDF fájlhoz")
@@ -44,8 +44,8 @@ class MainUI(QWidget):
         self.pdf_browse_btn.clicked.connect(self.browse_pdf)
 
         # Autók Excel sor
-        self.xlsx_path_input = QLineEdit()
-        self.xlsx_path_input.setPlaceholderText("Autók Excel elérési útja...")
+        self.xlsx_path_input = DragDropLineEdit(allowed_extensions=[".xlsx", ".xls"])
+        self.xlsx_path_input.setPlaceholderText("Húzd ide az autók Excel fájlt, vagy tallózz...")
         self.xlsx_browse_btn = QPushButton("📂")
         self.xlsx_browse_btn.setMaximumWidth(45)
         self.xlsx_browse_btn.setToolTip("Tallózás az autók Excel fájlhoz")

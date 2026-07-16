@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -15,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from app.backend.modules.barcode_pdf.service import copy_matching_pdfs
 
+from app.frontend.components.drag_drop_line_edit import DragDropLineEdit
 from app.backend.workers.background_task import BackgroundTask
 from app.frontend.theme import (
     get_action_button_stylesheet,
@@ -32,24 +32,24 @@ class BarcodeCopierWindow(QWidget):
         self.setMinimumWidth(320)
         self.setMinimumHeight(220)
 
-        self.excel_path_input = QLineEdit()
-        self.excel_path_input.setPlaceholderText("Excel fájl elérési útja...")
+        self.excel_path_input = DragDropLineEdit(allowed_extensions=[".xlsx", ".xls"])
+        self.excel_path_input.setPlaceholderText("Húzd ide az Excel fájlt, vagy tallózz...")
         self.excel_browse_btn = QPushButton("📂")
         self.excel_browse_btn.setMaximumWidth(45)
         self.excel_browse_btn.setToolTip("Tallózás az Excel fájlhoz")
         self.excel_browse_btn.setStyleSheet(get_browse_button_stylesheet())
         self.excel_browse_btn.clicked.connect(self.browse_excel)
 
-        self.pdf_folder_input = QLineEdit()
-        self.pdf_folder_input.setPlaceholderText("PDF mappa elérési útja...")
+        self.pdf_folder_input = DragDropLineEdit(allow_folder=True)
+        self.pdf_folder_input.setPlaceholderText("Húzd ide a PDF mappát...")
         self.pdf_browse_btn = QPushButton("📂")
         self.pdf_browse_btn.setMaximumWidth(45)
         self.pdf_browse_btn.setToolTip("Tallózás a PDF mappához")
         self.pdf_browse_btn.setStyleSheet(get_browse_button_stylesheet())
         self.pdf_browse_btn.clicked.connect(self.browse_pdf_folder)
 
-        self.output_folder_input = QLineEdit()
-        self.output_folder_input.setPlaceholderText("Kimeneti mappa elérési útja...")
+        self.output_folder_input = DragDropLineEdit(allow_folder=True)
+        self.output_folder_input.setPlaceholderText("Húzd ide a kimeneti mappát...")
         self.output_browse_btn = QPushButton("📂")
         self.output_browse_btn.setMaximumWidth(45)
         self.output_browse_btn.setToolTip("Tallózás a kimeneti mappához")

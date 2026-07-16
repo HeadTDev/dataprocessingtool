@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from app.backend.modules.cofanet.service import process_cofanet_files
 
+from app.frontend.components.drag_drop_line_edit import DragDropLineEdit
 from app.backend.workers.background_task import BackgroundTask
 from app.frontend.theme import (
     get_action_button_stylesheet,
@@ -33,16 +34,16 @@ class CofanetHelpUI(QWidget):
         self.setMinimumWidth(320)
         self.setMinimumHeight(280)
 
-        self.sap_path_input = QLineEdit()
-        self.sap_path_input.setPlaceholderText("SAP input fájl elérési útja...")
+        self.sap_path_input = DragDropLineEdit(allowed_extensions=[".xls", ".txt", ".csv"])
+        self.sap_path_input.setPlaceholderText("Húzd ide a SAP fájlt, vagy tallózz...")
         self.sap_browse_btn = QPushButton("📂")
         self.sap_browse_btn.setMaximumWidth(45)
         self.sap_browse_btn.setToolTip("Tallózás a SAP fájlhoz")
         self.sap_browse_btn.setStyleSheet(get_browse_button_stylesheet())
         self.sap_browse_btn.clicked.connect(self.browse_sap)
 
-        self.coface_excel_input = QLineEdit()
-        self.coface_excel_input.setPlaceholderText("Coface Excel fájl elérési útja...")
+        self.coface_excel_input = DragDropLineEdit(allowed_extensions=[".xlsx", ".xls"])
+        self.coface_excel_input.setPlaceholderText("Húzd ide a Coface Excel fájlt, vagy tallózz...")
         self.coface_browse_btn = QPushButton("📂")
         self.coface_browse_btn.setMaximumWidth(45)
         self.coface_browse_btn.setToolTip("Tallózás a Coface Excel fájlhoz")

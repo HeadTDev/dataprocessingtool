@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.backend.modules.ksh.service import Processor
 
+from app.frontend.components.drag_drop_line_edit import DragDropLineEdit
 from app.backend.workers.background_task import BackgroundTask
 from app.frontend.theme import (
     get_action_button_stylesheet,
@@ -33,16 +33,16 @@ class MainUI(QWidget):
         self.setMinimumWidth(320)
         self.setMinimumHeight(210)
 
-        self.ksh_input = QLineEdit()
-        self.ksh_input.setPlaceholderText("KSH fájl elérési útja...")
+        self.ksh_input = DragDropLineEdit()
+        self.ksh_input.setPlaceholderText("Húzd ide a KSH fájlt, vagy tallózz...")
         ksh_btn = QPushButton("📂")
         ksh_btn.setMaximumWidth(45)
         ksh_btn.setToolTip("Tallózás a KSH fájlhoz")
         ksh_btn.setStyleSheet(get_browse_button_stylesheet())
         ksh_btn.clicked.connect(self.browse_ksh)
 
-        self.mat_input = QLineEdit()
-        self.mat_input.setPlaceholderText("Matstamm fájl elérési útja...")
+        self.mat_input = DragDropLineEdit(allowed_extensions=[".xlsx", ".xls"])
+        self.mat_input.setPlaceholderText("Húzd ide a Matstamm Excel fájlt, vagy tallózz...")
         mat_btn = QPushButton("📂")
         mat_btn.setMaximumWidth(45)
         mat_btn.setToolTip("Tallózás a Matstamm fájlhoz")
