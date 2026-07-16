@@ -1,0 +1,5 @@
+APP_NAME = "DataProcessingTool"
+VERSION_FILE = "version.json"
+UPDATE_LOG_FILE = "update.log"
+GITHUB_OWNER = "HeadTDev"
+GITHUB_REPO = "dataprocessingtool"

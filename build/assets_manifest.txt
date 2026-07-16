@@ -1,0 +1,7 @@
+icons/coface_icon.png
+icons/ksh_icon.png
+icons/mouse_icon.png
+icons/otp_icon.png
+icons/pdf_icon.png
+icons/synthwave_icon.png
+version.json

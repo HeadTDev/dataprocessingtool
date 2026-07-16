@@ -6,7 +6,10 @@
 
 ## Ignore Python bytecode files
 *.pyc
+__pycache__/
 
 # --- Auto updater state & logs ---
 version.json
 update_log.txt
+logs/*.log
+!logs/.gitkeep

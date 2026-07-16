@@ -1,0 +1,7 @@
+from app.config.constants import APP_NAME, GITHUB_OWNER, GITHUB_REPO
+
+DEBUG = True
+ALLOW_PRERELEASES = False
+ALLOW_ZIP_FALLBACK = True
+INCREMENTAL_DEFAULT = True
+USER_AGENT = f"{APP_NAME}/2.0 (+https://github.com/{GITHUB_OWNER}/{GITHUB_REPO})"
