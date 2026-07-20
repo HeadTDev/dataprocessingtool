@@ -74,11 +74,13 @@ class BackgroundTask(QObject):
 
     def _on_result(self, result: Any):
         self._close_progress_dialog()
-        self.on_result(result)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, lambda: self.on_result(result))
 
     def _on_error(self, error_message: str):
         self._close_progress_dialog()
-        self.on_error(error_message)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, lambda: self.on_error(error_message))
 
     def _on_finished(self):
         self.button.setEnabled(True)

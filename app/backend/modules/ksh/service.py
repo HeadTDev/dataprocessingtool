@@ -100,6 +100,7 @@ class Processor:
         new_header = header.copy()
         if new_header[-1].strip() != "":
             new_header.append("")
+        expected_original_len = len(new_header)
         new_header.append("Iparági értékesítés")
 
         new_data_rows = []
@@ -109,13 +110,13 @@ class Processor:
             # Ne floodoljuk a GUI-t másodpercenként 1000 eventtel, csak 10000 soronként szóljunk
             if progress_callback and index % 10000 == 0:
                 progress_callback("KSH sorok kiegészítése...", index, total_data_rows)
-            while len(row) < len(header):
+            if len(row) > expected_original_len:
+                row = row[:expected_original_len]
+            while len(row) < expected_original_len:
                 row.append("")
             anyag_val = str(row[data_anyag_idx]).strip()
             iparagi_ertekesites = mat_lookup.get(anyag_val, "")
             new_row = row.copy()
-            if len(new_row) < len(new_header) - 1:
-                new_row.append("")
             new_row.append(iparagi_ertekesites)
             new_data_rows.append(new_row)
 
@@ -193,8 +194,7 @@ class Processor:
             new_row = (
                 row[:egyenleg_value_idx]
                 + [f"{egyenleg_val:.2f}", egyenleg_cur]
-                + row[egyenleg_value_idx:-2]
-                + [row[-2], row[-1]]
+                + row[egyenleg_value_idx:]
             )
             egysites_data_rows.append(new_row)
 
