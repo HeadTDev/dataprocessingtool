@@ -5,6 +5,10 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from app.backend.services.logging_service import get_logger
+
+logger = get_logger("mouse_mover")
+
 
 @dataclass
 class MoveSettings:
@@ -38,6 +42,7 @@ class CursorMover(QObject):
     def start(self):
         if self._moving:
             return
+        logger.info("Cursor mover started.")
         self._moving = True
         self._path = []
         self._index = 0
@@ -46,6 +51,8 @@ class CursorMover(QObject):
         self._schedule_next_move()
 
     def stop(self):
+        if self._moving:
+            logger.info("Cursor mover stopped.")
         self._moving = False
         self._step_timer.stop()
         self._idle_timer.stop()

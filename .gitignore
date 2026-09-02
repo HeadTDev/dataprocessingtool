@@ -11,5 +11,6 @@ __pycache__/
 # --- Auto updater state & logs ---
 version.json
 update_log.txt
-logs/*.log
+logs/**/*.log
+logs/**/*.log.zip
 !logs/.gitkeep

@@ -3,9 +3,12 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from app.backend.services.update_service import read_local_version_info
+from app.backend.services.logging_service import get_logger
 from app.frontend.routes import ROUTES, AppRoute
 from app.frontend.theme import get_action_button_stylesheet, get_dark_theme_stylesheet
 from app.resources.resource_path import resource_path
+
+logger = get_logger("app")
 
 BUTTON_SIZE = (300, 40)
 
@@ -56,6 +59,7 @@ class MainWindow(QWidget):
         try:
             window = route.view_class()
         except Exception as exc:
+            logger.exception(f"Failed to start module: {route.label}")
             QMessageBox.critical(self, "Hiba", f"Hiba a modul indításakor: {route.label}\n{exc}")
             return
         self._open_windows[route.id] = window

@@ -6,6 +6,9 @@ import pandas as pd
 import xlsxwriter
 
 from app.config.paths import module_output_dir
+from app.backend.services.logging_service import get_logger
+
+logger = get_logger("ksh")
 
 
 class Processor:
@@ -17,16 +20,23 @@ class Processor:
         progress_callback=None,
         is_cancelled=None,
     ):
+        logger.info("Processing started.")
         try:
-            return self._process(
+            result = self._process(
                 ksh_path,
                 matstamm_path,
                 save_path=save_path,
                 progress_callback=progress_callback,
                 is_cancelled=is_cancelled,
             )
+            logger.info(f"Processing succeeded. Row count: {result.get('row_count', 0)}")
+            return result
         except InterruptedError:
+            logger.info("Processing cancelled by user.")
             return {"cancelled": True, "output_path": None, "row_count": 0}
+        except Exception:
+            logger.exception("Processing failed with an error.")
+            raise
 
     def _raise_if_cancelled(self, is_cancelled=None):
         if is_cancelled and is_cancelled():
@@ -76,6 +86,7 @@ class Processor:
                 dtype=str,
             )
         except Exception as e:
+            logger.exception("Error while reading the Matstamm file.")
             raise ValueError(f"Hiba a Matstamm fájl beolvasásakor: {e}")
 
         anyag_col = next((c for c in df_mat.columns if str(c).strip() == "Anyag"), None)
@@ -287,6 +298,7 @@ class Processor:
                 shutil.rmtree(output_dir)
                 cleanup_message = "Az output mappa törlésre került."
             except Exception as exc:
+                logger.warning(f"Failed to delete output folder: {exc}")
                 cleanup_message = f"Figyelem, az output mappa törlése sikertelen: {exc}"
 
         return {

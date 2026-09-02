@@ -1,5 +1,9 @@
 import re
 
+from app.backend.services.logging_service import get_logger
+
+logger = get_logger("cofanet")
+
 
 def extract_invoice_summary(filename, progress_callback=None, is_cancelled=None):
     """
@@ -52,8 +56,11 @@ def extract_invoice_summary(filename, progress_callback=None, is_cancelled=None)
             break
         except InterruptedError:
             raise
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"Failed to read SAP file with encoding '{encoding}': {exc}")
             continue
+    else:
+        logger.error(f"SAP file could not be read with any of the attempted encodings: {encodings}")
 
     # PRAKTIKER összevonás
     praktiker_key = "Praktiker Kft."

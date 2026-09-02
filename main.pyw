@@ -6,9 +6,13 @@ from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen, QMessageBox
 
 from app.resources.resource_path import resource_path
+from app.backend.services.logging_service import get_logger
+
+logger = get_logger("app")
 
 
 def main():
+    logger.info("Application starting.")
     qt_app = QApplication(sys.argv)
 
     pixmap = QPixmap(resource_path("icons", "synthwave_icon.png")).scaled(
@@ -60,6 +64,7 @@ def main():
                 subprocess.Popen([sys.executable] + sys.argv)
                 sys.exit(0)
             except Exception as e:
+                logger.exception("Update failed.")
                 splash.hide()
                 QMessageBox.critical(None, "Hiba", f"Sikertelen frissítés:\n{e}")
         

@@ -12,31 +12,25 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.config.constants import GITHUB_OWNER, GITHUB_REPO, UPDATE_LOG_FILE, VERSION_FILE as VERSION_FILE_NAME
-from app.config.paths import LOGS_DIR, PROJECT_ROOT
-from app.config.settings import ALLOW_PRERELEASES, DEBUG, USER_AGENT
+from app.config.paths import PROJECT_ROOT
+from app.config.settings import ALLOW_PRERELEASES, USER_AGENT
+from app.backend.services.logging_service import get_logger
 
 OWNER = GITHUB_OWNER
 REPO = GITHUB_REPO
 VERSION_FILE = str(PROJECT_ROOT / VERSION_FILE_NAME)
-LOG_FILE = str(LOGS_DIR / UPDATE_LOG_FILE)
-PROTECTED_UPDATE_PATHS = {VERSION_FILE_NAME, "update_log.txt", f"logs/{UPDATE_LOG_FILE}"}
+PROTECTED_UPDATE_PATHS = {VERSION_FILE_NAME, "update_log.txt", f"logs/update/{UPDATE_LOG_FILE}"}
 
 CHECK_TIMEOUT = 8
 INITIALIZE_WITHOUT_FORCE_DOWNLOAD = True  # első futásnál (nincs version.json) ne töltsön, csak inicializáljon
 
 MAX_BODY_SNIPPET = 400  # promptban ennyire vágjuk a release body-t
 
+_logger = get_logger("update")
+
+
 def log(msg: str):
-    ts = datetime.now(timezone.utc).isoformat()
-    line = f"[{ts}] {msg}"
-    try:
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
-    if DEBUG:
-        print(line)
+    _logger.info(msg)
 
 
 def safe_json_load(path: str):
@@ -148,13 +142,13 @@ def apply_incremental_update(
         status = fentry.get("status")
         filename = fentry.get("filename")
         prev_name = fentry.get("previous_filename")
-        log(f"Fájl: {filename} (status={status})")
+        log(f"File: {filename} (status={status})")
         if not isinstance(filename, str) or not filename:
-            log("Hiányzó vagy érvénytelen fájlnév, kihagyva.")
+            log("Missing or invalid filename, skipping.")
             continue
 
         if filename.replace("\\", "/") in PROTECTED_UPDATE_PATHS:
-            log(f"Védett fájl kihagyva: {filename}")
+            log(f"Protected file skipped: {filename}")
             continue
 
         target_path = PROJECT_ROOT / filename
@@ -177,7 +171,7 @@ def apply_incremental_update(
                 try:
                     target_path.unlink()
                 except Exception as e:
-                    log(f"Törlés hiba: {filename}: {e}")
+                    log(f"Delete error: {filename}: {e}")
 
         elif status == "renamed":
             if isinstance(prev_name, str) and prev_name.replace("\\", "/") not in PROTECTED_UPDATE_PATHS:
@@ -186,7 +180,7 @@ def apply_incremental_update(
                     try:
                         prev_path.unlink()
                     except Exception as e:
-                        log(f"Rename előző törlés hiba: {prev_name}: {e}")
+                        log(f"Rename previous-file delete error: {prev_name}: {e}")
             try:
                 content = download_file_raw(head_sha, filename)
             except Exception as e:
@@ -195,14 +189,14 @@ def apply_incremental_update(
             with open(target_path, "wb") as f:
                 f.write(content)
         else:
-            log(f"Ismeretlen státusz: {status} - {filename}")
+            log(f"Unknown status: {status} - {filename}")
 
 
 def download_release_zip(
     zip_url: str,
     progress_cb: Callable[[str, int, int, bool], None] | None = None,
 ):
-    log("Release ZIP letöltése...")
+    log("Downloading release ZIP...")
     with tempfile.TemporaryDirectory() as td:
         zip_path = os.path.join(td, "rel.zip")
         req = _build_request(zip_url, accept_json=False)
@@ -257,7 +251,7 @@ def download_release_zip(
                 if target_path.exists():
                     target_path.unlink()
                 os.replace(tmp_path, target_path)
-    log("Release ZIP kibontva.")
+    log("Release ZIP extracted.")
 
 
 # --- Alap (headless) UI callback-ek (felülírhatóak) ---
@@ -303,12 +297,12 @@ def perform_update_flow(
         local = read_local_version_info()
         local_tag = local.get("version") or ""
         local_commit = local.get("commit") or ""
-        log(f"Helyi verzió tag='{local_tag}' commit='{local_commit}'")
+        log(f"Local version tag='{local_tag}' commit='{local_commit}'")
 
         try:
             release = get_latest_release()
         except Exception as e:
-            log(f"Nem sikerült lekérni a latest release-t: {e}")
+            log(f"Failed to fetch the latest release: {e}")
             ui_progress("", 0, 0, True)
             return
 
@@ -321,19 +315,19 @@ def perform_update_flow(
             release_body_snip = release_body
 
         if not remote_tag:
-            log("A release-ben nincs tag_name, kilépés.")
+            log("Release has no tag_name, aborting.")
             ui_progress("", 0, 0, True)
             return
 
         try:
             remote_commit_sha = get_commit_sha_for_tag(remote_tag)
         except Exception as e:
-            log(f"Nem sikerült commit SHA-t lekérni a tagez: {e}")
+            log(f"Failed to fetch commit SHA for the tag: {e}")
             ui_progress("", 0, 0, True)
             return
 
         if local_tag == remote_tag:
-            log("Nincs új release (azonos tag).")
+            log("No new release (same tag).")
             ui_set_version(remote_tag or "ismeretlen")
             ui_progress("", 0, 0, True)
             return
@@ -342,7 +336,7 @@ def perform_update_flow(
         if not local_tag and INITIALIZE_WITHOUT_FORCE_DOWNLOAD:
             write_local_version(remote_tag, remote_commit_sha)
             ui_set_version(remote_tag)
-            log("Inicializáció (version.json létrehozva).")
+            log("Initialization (version.json created).")
             return
 
         # Van új release
@@ -351,7 +345,7 @@ def perform_update_flow(
             prompt_msg += f"\n\nVáltozások (részlet):\n{release_body_snip}"
 
         if not ui_prompt(prompt_msg):
-            log("Felhasználó elutasította a release frissítést.")
+            log("User declined the release update.")
             ui_progress("", 0, 0, True)
             return
 
@@ -366,12 +360,12 @@ def perform_update_flow(
                 if ahead_by and ahead_by > 0 and files:
                     apply_incremental_update(files, remote_commit_sha, progress_cb=ui_progress)
                     did_incremental = True
-                    log("Inkrementális frissítés sikeres release-re.")
+                    log("Incremental update succeeded for the release.")
                 else:
-                    log("Nincs diff vagy üres diff -> inkrementális nem szükséges.")
+                    log("No diff or empty diff -> incremental update not needed.")
                     did_incremental = True  # gyakorlatilag nincs változás
             except Exception as e:
-                log(f"Inkrementális frissítés sikertelen: {e}")
+                log(f"Incremental update failed: {e}")
                 log(traceback.format_exc())
 
         # Ha nem sikerült inkrementális vagy nem preferált: teljes ZIP
@@ -417,7 +411,7 @@ def check_update_available(cache_hours=1.0):
         try:
             last_checked = datetime.fromisoformat(last_checked_str)
             if (datetime.now(timezone.utc) - last_checked).total_seconds() < cache_hours * 3600:
-                log("Rate limit: Nem telt el elég idő az utolsó ellenőrzés óta.")
+                log("Rate limit: not enough time has passed since the last check.")
                 return False, None
         except Exception:
             pass
@@ -425,7 +419,7 @@ def check_update_available(cache_hours=1.0):
     try:
         release = get_latest_release()
     except Exception as e:
-        log(f"Frissítés keresés hiba: {e}")
+        log(f"Update check error: {e}")
         return False, None
         
     remote_tag = release.get("tag_name") or ""
@@ -462,7 +456,7 @@ def do_update(release, progress_cb=None):
                 apply_incremental_update(files, remote_commit_sha, progress_cb=progress_cb)
                 did_incremental = True
         except Exception as e:
-            log(f"Inkrementális sikertelen: {e}")
+            log(f"Incremental update failed: {e}")
             
     if not did_incremental:
         zip_url = release.get("zipball_url")

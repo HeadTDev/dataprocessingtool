@@ -5,8 +5,10 @@ import shutil
 from app.config.paths import module_output_dir
 from app.backend.modules.cofanet.excel_writer import fill_coface_excel_and_open
 from app.backend.modules.cofanet.parser import extract_invoice_summary
+from app.backend.services.logging_service import get_logger
 
 OUTPUT_DIR = str(module_output_dir("cofanet"))
+logger = get_logger("cofanet")
 
 
 def _raise_if_cancelled(is_cancelled=None):
@@ -26,6 +28,7 @@ def process_cofanet_files(
     progress_callback=None,
     is_cancelled=None,
 ):
+    logger.info("Processing started.")
     try:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -95,9 +98,10 @@ def process_cofanet_files(
         # a végleges Coface Excel elkészülte (save_path) után nem szabad megőrizni.
         try:
             shutil.rmtree(OUTPUT_DIR)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"Failed to delete output folder: {exc}")
 
+        logger.info(f"Processing succeeded. Customer row count: {total_rows}")
         return {
             "cancelled": False,
             "rows_count": total_rows,
@@ -105,9 +109,13 @@ def process_cofanet_files(
             "coface_output_path": coface_output_path,
         }
     except InterruptedError:
+        logger.info("Processing cancelled by user.")
         return {
             "cancelled": True,
             "rows_count": 0,
             "vevok_csv_path": None,
             "coface_output_path": None,
         }
+    except Exception:
+        logger.exception("Processing failed with an error.")
+        raise

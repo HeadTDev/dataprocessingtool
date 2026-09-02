@@ -4,9 +4,12 @@ import re
 from collections import defaultdict
 
 from app.config.paths import module_output_dir
+from app.backend.services.logging_service import get_logger
 
 import pandas as pd
 from PyPDF2 import PdfReader
+
+logger = get_logger("merkantil")
 
 categories = {
     "Bérleti díj": [
@@ -157,6 +160,7 @@ def save_to_csv_with_kgthely(
 
 
 def run(pdf_path, excel_path, progress_callback=None, is_cancelled=None):
+    logger.info("Processing started.")
     try:
         text = extract_text_from_pdf(
             pdf_path,
@@ -187,12 +191,17 @@ def run(pdf_path, excel_path, progress_callback=None, is_cancelled=None):
         try:
             if os.path.exists(read_data_path):
                 os.remove(read_data_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"Failed to delete read_data.csv: {exc}")
+        logger.info(f"Processing succeeded. Vehicles processed: {len(vehicles)}")
         return {
             "cancelled": False,
             "output_csv": output_csv,
             "vehicle_count": len(vehicles),
         }
     except OperationCancelled:
+        logger.info("Processing cancelled by user.")
         return {"cancelled": True, "output_csv": None, "vehicle_count": 0}
+    except Exception:
+        logger.exception("Processing failed with an error.")
+        raise

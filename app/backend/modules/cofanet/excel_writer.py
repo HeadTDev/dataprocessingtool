@@ -8,6 +8,10 @@ from difflib import SequenceMatcher
 from openpyxl import load_workbook
 from openpyxl.styles import numbers
 
+from app.backend.services.logging_service import get_logger
+
+logger = get_logger("cofanet")
+
 
 def normalize_name(name):
     if not name:
@@ -139,6 +143,7 @@ def fill_coface_excel_and_open(
     from openpyxl.cell.cell import MergedCell
 
     total_vevok = len(vevok_data)
+    unmatched_count = 0
     for index, (vevo_name, amount) in enumerate(vevok_data, start=1):
         if is_cancelled and is_cancelled():
             raise InterruptedError("A feldolgozás megszakítva.")
@@ -165,6 +170,12 @@ def fill_coface_excel_and_open(
                     )  # '1,234,567.89'
                 else:
                     cell.value = amount
+        else:
+            unmatched_count += 1
+    if unmatched_count:
+        # Company/customer names are never logged (no business data may remain in logs) -
+        # only the count of unmatched rows is recorded.
+        logger.warning(f"{unmatched_count} vevo row(s) could not be matched to a coface company.")
 
     # --- MENTÉS FELHASZNÁLÓ ÁLTAL VÁLASZTOTT HELYRE ---
     if save_path is None:

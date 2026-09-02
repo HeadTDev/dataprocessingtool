@@ -14,3 +14,9 @@ def module_output_dir(module_name: str) -> Path:
     output_dir = PROJECT_ROOT / "output" / module_name
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
+
+
+def module_log_dir(module_name: str) -> Path:
+    log_dir = LOGS_DIR / module_name
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
