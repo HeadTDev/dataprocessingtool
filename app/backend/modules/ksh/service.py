@@ -65,11 +65,13 @@ class Processor:
         if progress_callback:
             progress_callback("Matstamm beolvasása (Pandas + Calamine motorral)...", 0, 0)
         
-        # PANDAS + CALAMINE OPTIMALIZÁCIÓ
+        # Az "calamine" motor natív (Rust) szálakat hagyhat életben a beolvasás után,
+        # ami blokkolja a Python interpreter leállását (UI befagy, kilépéskor sem
+        # tud leállni a folyamat) -> openpyxl motort használunk helyette.
         try:
             df_mat = pd.read_excel(
                 matstamm_path,
-                engine="calamine",
+                engine="openpyxl",
                 usecols=lambda x: str(x).strip() in ["Anyag", "Beszerzés fajtája"],
                 dtype=str,
             )
