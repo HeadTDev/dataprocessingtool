@@ -36,7 +36,7 @@ class MainUI(QWidget):
         super().__init__()
         self.setWindowTitle("PDF Autóköltség Feldolgozó")
         self.setWindowIcon(QIcon(resource_path("icons", "otp_icon.png")))
-        self.setMinimumWidth(320)
+        self.setMinimumWidth(280)
         self.setMinimumHeight(220)
 
         icon_size = QSize(ICON_SIZE_INLINE, ICON_SIZE_INLINE)
@@ -88,6 +88,7 @@ class MainUI(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.addWidget(input_group)
         layout.addWidget(self.process_btn)
+        layout.addStretch()
 
         self.setLayout(layout)
         self.setStyleSheet(get_dark_theme_stylesheet())

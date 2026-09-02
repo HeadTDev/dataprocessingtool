@@ -50,6 +50,8 @@ ICON_SIZE_INLINE = 16
 BUTTON_HEIGHT_PRIMARY = 36
 BUTTON_HEIGHT_COMPACT = 28
 
+SIDEBAR_WIDTH = 280
+
 
 def get_icon(name: str, color: str = COLOR_ACCENT, color_disabled: str = COLOR_TEXT_DISABLED):
     """Returns a themed Phosphor icon (via qtawesome) for buttons/labels.
@@ -149,6 +151,32 @@ def get_action_button_stylesheet():
             background-color: {COLOR_BUTTON_BG_DISABLED};
             color: {COLOR_TEXT_DISABLED};
             border: 1px solid {COLOR_BORDER_DEFAULT};
+        }}
+    """
+
+
+def get_nav_button_stylesheet():
+    """Returns stylesheet for the sidebar navigation buttons (checkable)."""
+    return f"""
+        QPushButton {{
+            background-color: transparent;
+            color: {COLOR_TEXT_PRIMARY};
+            border: none;
+            border-radius: {RADIUS_MD}px;
+            text-align: left;
+            font-size: 12px;
+            padding: {SPACE_3}px {SPACE_3}px;
+        }}
+        QPushButton:hover {{
+            background-color: {COLOR_BG_INPUT};
+        }}
+        QPushButton:checked {{
+            background-color: {COLOR_ACCENT_SOFT_BG};
+            color: {COLOR_ACCENT};
+            font-weight: bold;
+        }}
+        QPushButton:disabled {{
+            color: {COLOR_TEXT_DISABLED};
         }}
     """
 

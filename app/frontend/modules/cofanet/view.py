@@ -36,7 +36,7 @@ class CofanetHelpUI(QWidget):
         super().__init__()
         self.setWindowTitle("Cofanet Help")
         self.setWindowIcon(QIcon(resource_path("icons", "coface_icon.png")))
-        self.setMinimumWidth(320)
+        self.setMinimumWidth(280)
         self.setMinimumHeight(280)
 
         icon_size = QSize(ICON_SIZE_INLINE, ICON_SIZE_INLINE)
@@ -100,6 +100,7 @@ class CofanetHelpUI(QWidget):
         layout.addWidget(input_group)
         layout.addWidget(config_group)
         layout.addWidget(self.process_btn)
+        layout.addStretch()
 
         self.setLayout(layout)
         self.setStyleSheet(get_dark_theme_stylesheet())
