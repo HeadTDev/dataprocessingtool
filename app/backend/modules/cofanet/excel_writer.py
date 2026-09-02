@@ -24,14 +24,13 @@ def normalize_name(name):
     return name
 
 
-def best_fuzzy_match(vevo_name, coface_names, threshold=0.80):
+def best_fuzzy_match(vevo_name, coface_norm_names, coface_word_sets, threshold=0.80):
     norm_vevo = normalize_name(vevo_name)
+    words_v = set(norm_vevo.split())
     best_idx, best_score = None, 0.0
-    for idx, name in enumerate(coface_names):
-        norm_coface = normalize_name(name)
+    for idx, norm_coface in enumerate(coface_norm_names):
         score = SequenceMatcher(None, norm_vevo, norm_coface).ratio()
-        words_v = set(norm_vevo.split())
-        words_c = set(norm_coface.split())
+        words_c = coface_word_sets[idx]
         word_score = len(words_v & words_c) / max(1, len(words_v | words_c))
         total_score = max(score, word_score)
         if total_score > best_score:
@@ -68,18 +67,23 @@ def format_amount(amount_str):
         return None, amount_str
 
 
-def find_row_for_company(vevo_name, coface_names):
+def find_row_for_company(
+    vevo_name,
+    coface_names_lower,
+    coface_norm_names,
+    coface_word_sets,
+    coface_first_words,
+):
     vevo_name_lower = vevo_name.lower().strip()
-    for idx, name in enumerate(coface_names):
-        if vevo_name_lower == name.lower().strip():
+    for idx, name_lower in enumerate(coface_names_lower):
+        if vevo_name_lower == name_lower:
             return idx
-    idx = best_fuzzy_match(vevo_name, coface_names, threshold=0.80)
+    idx = best_fuzzy_match(vevo_name, coface_norm_names, coface_word_sets, threshold=0.80)
     if idx is not None:
         return idx
     vevo_first_word = vevo_name_lower.split()[0] if vevo_name_lower.split() else ""
-    for idx, name in enumerate(coface_names):
-        coface_words = name.lower().split()
-        if coface_words and vevo_first_word == coface_words[0]:
+    for idx, first_word in enumerate(coface_first_words):
+        if first_word and vevo_first_word == first_word:
             return idx
     return None
 
@@ -122,6 +126,16 @@ def fill_coface_excel_and_open(
     coface_rows = list(ws.iter_rows(min_row=header_row_idx + 1, max_row=ws.max_row))
     coface_names = [str(row[cegnev_col].value or "").strip() for row in coface_rows]
 
+    # Előfeldolgozás egyszer, a vevő-ciklus előtt - a fuzzy matching (normalize_name +
+    # SequenceMatcher) korábban minden egyes vevőnél újraszámolta az összes coface
+    # névre, ami O(vevők x coface sorok) redundáns munkát jelentett nagyobb fájloknál.
+    coface_names_lower = [name.lower().strip() for name in coface_names]
+    coface_norm_names = [normalize_name(name) for name in coface_names]
+    coface_word_sets = [set(norm.split()) for norm in coface_norm_names]
+    coface_first_words = [
+        name_lower.split()[0] if name_lower.split() else "" for name_lower in coface_names_lower
+    ]
+
     from openpyxl.cell.cell import MergedCell
 
     total_vevok = len(vevok_data)
@@ -132,7 +146,13 @@ def fill_coface_excel_and_open(
             progress_callback("Coface cégek párosítása...", index, total_vevok)
         if not vevo_name:
             continue
-        idx = find_row_for_company(vevo_name, coface_names)
+        idx = find_row_for_company(
+            vevo_name,
+            coface_names_lower,
+            coface_norm_names,
+            coface_word_sets,
+            coface_first_words,
+        )
         if idx is not None:
             target_row = coface_rows[idx]
             cell = target_row[osszeg_col]
