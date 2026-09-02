@@ -15,14 +15,15 @@ class AppRoute:
     id: str
     label: str
     icon: str
+    qta_icon: str
     view_class: Type[QWidget]
     enabled: bool = True
 
 
 ROUTES = [
-    AppRoute("merkantil", "💸 Merkantil PDF Feldolgozó", "otp_icon.png", MerkantilView),
-    AppRoute("barcode_pdf", "📂 Vonalkód PDF Másolás", "pdf_icon.png", BarcodeCopierWindow),
-    AppRoute("cofanet", "📚 Cofanet Help", "coface_icon.png", CofanetHelpUI),
-    AppRoute("ksh", "🔧 KSH Iparági Értékesítés", "ksh_icon.png", KshView),
-    AppRoute("mouse_mover", "🖱️ Mouse Mover", "mouse_icon.png", MouseMoverView),
+    AppRoute("merkantil", "Merkantil PDF Feldolgozó", "otp_icon.png", "car", MerkantilView),
+    AppRoute("barcode_pdf", "Vonalkód PDF Másolás", "pdf_icon.png", "barcode", BarcodeCopierWindow),
+    AppRoute("cofanet", "Cofanet Help", "coface_icon.png", "receipt", CofanetHelpUI),
+    AppRoute("ksh", "KSH Iparági Értékesítés", "ksh_icon.png", "chart-line-up", KshView),
+    AppRoute("mouse_mover", "Mouse Mover", "mouse_icon.png", "cursor", MouseMoverView),
 ]

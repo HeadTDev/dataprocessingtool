@@ -8,12 +8,20 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QGroupBox,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QFont, QIcon
 
 from app.backend.modules.mouse_mover.service import CursorMover, MoveSettings
 
-from app.frontend.theme import get_dark_theme_stylesheet, get_action_button_stylesheet
+from app.frontend.theme import (
+    COLOR_DANGER,
+    COLOR_SUCCESS,
+    COLOR_WARNING,
+    ICON_SIZE_INLINE,
+    get_action_button_stylesheet,
+    get_dark_theme_stylesheet,
+    get_icon,
+)
 from app.resources.resource_path import resource_path
 
 
@@ -86,12 +94,18 @@ class MainUI(QWidget):
         self.curve_slider.valueChanged.connect(lambda v: self.curve_label.setText(f"{v / 100.0:.2f}"))
 
         # Buttons
-        self.start_btn = QPushButton("▶ Start")
+        icon_size = QSize(ICON_SIZE_INLINE, ICON_SIZE_INLINE)
+
+        self.start_btn = QPushButton(" Start")
+        self.start_btn.setIcon(get_icon("play"))
+        self.start_btn.setIconSize(icon_size)
         self.start_btn.setMinimumHeight(36)
         self.start_btn.setStyleSheet(get_action_button_stylesheet())
         self.start_btn.clicked.connect(self.start_mover)
 
-        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn = QPushButton(" Stop")
+        self.stop_btn.setIcon(get_icon("stop"))
+        self.stop_btn.setIconSize(icon_size)
         self.stop_btn.setMinimumHeight(36)
         self.stop_btn.setStyleSheet(get_action_button_stylesheet())
         self.stop_btn.clicked.connect(self.stop_mover)
@@ -99,7 +113,7 @@ class MainUI(QWidget):
 
         # Status display
         self.status_indicator = QLabel("●")
-        self.status_indicator.setStyleSheet("color: #aa0000; font-size: 16px;")
+        self.status_indicator.setStyleSheet(f"color: {COLOR_DANGER}; font-size: 16px;")
         self.status_text = QLabel("Idle")
         status_font = QFont()
         status_font.setPointSize(11)
@@ -117,7 +131,7 @@ class MainUI(QWidget):
         main_layout.setContentsMargins(16, 16, 16, 16)
 
         # Motion group
-        motion_group = QGroupBox("🎯 Beweging (Motion)")
+        motion_group = QGroupBox("Motion")
         motion_layout = QVBoxLayout()
         motion_layout.addLayout(self._slider_row("Min distance:", self.min_dist_slider, self.min_dist_label))
         motion_layout.addLayout(self._slider_row("Max distance:", self.max_dist_slider, self.max_dist_label))
@@ -125,7 +139,7 @@ class MainUI(QWidget):
         main_layout.addWidget(motion_group)
 
         # Timing group
-        timing_group = QGroupBox("⏱️ Timing")
+        timing_group = QGroupBox("Timing")
         timing_layout = QVBoxLayout()
         timing_layout.addLayout(self._slider_row("Min duration (s):", self.min_dur_slider, self.min_dur_label))
         timing_layout.addLayout(self._slider_row("Max duration (s):", self.max_dur_slider, self.max_dur_label))
@@ -134,7 +148,7 @@ class MainUI(QWidget):
         main_layout.addWidget(timing_group)
 
         # Curve group
-        curve_group = QGroupBox("〰️ Curve")
+        curve_group = QGroupBox("Curve")
         curve_layout = QVBoxLayout()
         curve_layout.addLayout(self._slider_row("Intensity:", self.curve_slider, self.curve_label))
         curve_group.setLayout(curve_layout)
@@ -154,19 +168,8 @@ class MainUI(QWidget):
         self._countdown_timer.timeout.connect(self._update_countdown)
 
     def _apply_dark_theme(self):
-        # Base dark theme with custom yellow slider handles for mouse_mover
-        self.setStyleSheet(get_dark_theme_stylesheet() + """
-            QSlider::handle:horizontal {
-                background: #CCAA00;
-                border: 1px solid #CCAA00;
-                width: 14px;
-                margin: -4px 0;
-                border-radius: 7px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: #DDBB00;
-            }
-        """)
+        # Slider handles now inherit the shared gold accent from the base theme.
+        self.setStyleSheet(get_dark_theme_stylesheet())
 
     def _slider_row(self, label_text, slider, value_label):
         row = QHBoxLayout()
@@ -193,7 +196,7 @@ class MainUI(QWidget):
         self._mover.start()
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.status_indicator.setStyleSheet("color: #22aa44; font-size: 16px;")
+        self.status_indicator.setStyleSheet(f"color: {COLOR_SUCCESS}; font-size: 16px;")
         self.status_text.setText("Running")
         self._countdown_timer.start(100)
 
@@ -204,14 +207,14 @@ class MainUI(QWidget):
         self._countdown_timer.stop()
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.status_indicator.setStyleSheet("color: #aa0000; font-size: 16px;")
+        self.status_indicator.setStyleSheet(f"color: {COLOR_DANGER}; font-size: 16px;")
         self.status_text.setText("Idle")
 
     def _on_user_interrupt(self):
         self._countdown_timer.stop()
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.status_indicator.setStyleSheet("color: #ffaa00; font-size: 16px;")
+        self.status_indicator.setStyleSheet(f"color: {COLOR_WARNING}; font-size: 16px;")
         self.status_text.setText("Stopped (user)")
 
     def _update_countdown(self):

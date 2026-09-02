@@ -1,6 +1,7 @@
 import os
 import sys
 
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -19,9 +20,13 @@ from app.frontend.components.drag_drop_line_edit import DragDropLineEdit
 
 from app.backend.workers.background_task import BackgroundTask
 from app.frontend.theme import (
+    BUTTON_HEIGHT_COMPACT,
+    BUTTON_HEIGHT_PRIMARY,
+    ICON_SIZE_INLINE,
     get_action_button_stylesheet,
     get_browse_button_stylesheet,
     get_dark_theme_stylesheet,
+    get_icon,
 )
 from app.resources.resource_path import resource_path
 
@@ -34,11 +39,15 @@ class MainUI(QWidget):
         self.setMinimumWidth(320)
         self.setMinimumHeight(220)
 
+        icon_size = QSize(ICON_SIZE_INLINE, ICON_SIZE_INLINE)
+
         # PDF fájl sor
         self.pdf_path_input = DragDropLineEdit(allowed_extensions=[".pdf"])
         self.pdf_path_input.setPlaceholderText("Húzd ide a PDF fájlt, vagy tallózz...")
-        self.pdf_browse_btn = QPushButton("📂")
-        self.pdf_browse_btn.setMaximumWidth(45)
+        self.pdf_browse_btn = QPushButton()
+        self.pdf_browse_btn.setIcon(get_icon("folder-open"))
+        self.pdf_browse_btn.setIconSize(icon_size)
+        self.pdf_browse_btn.setFixedSize(BUTTON_HEIGHT_COMPACT, BUTTON_HEIGHT_COMPACT)
         self.pdf_browse_btn.setToolTip("Tallózás a PDF fájlhoz")
         self.pdf_browse_btn.setStyleSheet(get_browse_button_stylesheet())
         self.pdf_browse_btn.clicked.connect(self.browse_pdf)
@@ -46,21 +55,25 @@ class MainUI(QWidget):
         # Autók Excel sor
         self.xlsx_path_input = DragDropLineEdit(allowed_extensions=[".xlsx", ".xls"])
         self.xlsx_path_input.setPlaceholderText("Húzd ide az autók Excel fájlt, vagy tallózz...")
-        self.xlsx_browse_btn = QPushButton("📂")
-        self.xlsx_browse_btn.setMaximumWidth(45)
+        self.xlsx_browse_btn = QPushButton()
+        self.xlsx_browse_btn.setIcon(get_icon("folder-open"))
+        self.xlsx_browse_btn.setIconSize(icon_size)
+        self.xlsx_browse_btn.setFixedSize(BUTTON_HEIGHT_COMPACT, BUTTON_HEIGHT_COMPACT)
         self.xlsx_browse_btn.setToolTip("Tallózás az autók Excel fájlhoz")
         self.xlsx_browse_btn.setStyleSheet(get_browse_button_stylesheet())
         self.xlsx_browse_btn.clicked.connect(self.browse_xlsx)
 
         # Feldolgozás gomb
-        self.process_btn = QPushButton("⚙️ Feldolgozás")
-        self.process_btn.setMinimumHeight(36)
+        self.process_btn = QPushButton(" Feldolgozás")
+        self.process_btn.setIcon(get_icon("gear"))
+        self.process_btn.setIconSize(icon_size)
+        self.process_btn.setMinimumHeight(BUTTON_HEIGHT_PRIMARY)
         self.process_btn.setStyleSheet(get_action_button_stylesheet())
         self.process_btn.setToolTip("PDF és Excel feldolgozása")
         self.process_btn.clicked.connect(self.process_file)
 
         # Grouping
-        input_group = QGroupBox("📁 Bemeneti fájlok")
+        input_group = QGroupBox("Bemeneti fájlok")
         input_layout = QVBoxLayout()
         input_layout.addLayout(
             self._create_row("PDF fájl:", self.pdf_path_input, self.pdf_browse_btn)

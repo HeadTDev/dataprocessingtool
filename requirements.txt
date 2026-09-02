@@ -4,3 +4,4 @@ pandas
 openpyxl
 xlsxwriter
 loguru
+qtawesome

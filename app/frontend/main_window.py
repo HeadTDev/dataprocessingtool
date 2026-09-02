@@ -1,11 +1,16 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from app.backend.services.update_service import read_local_version_info
 from app.backend.services.logging_service import get_logger
 from app.frontend.routes import ROUTES, AppRoute
-from app.frontend.theme import get_action_button_stylesheet, get_dark_theme_stylesheet
+from app.frontend.theme import (
+    ICON_SIZE_INLINE,
+    get_action_button_stylesheet,
+    get_dark_theme_stylesheet,
+    get_icon,
+)
 from app.resources.resource_path import resource_path
 
 logger = get_logger("app")
@@ -35,8 +40,11 @@ class MainWindow(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Válassz egy alkalmazást:"))
+        icon_size = QSize(ICON_SIZE_INLINE, ICON_SIZE_INLINE)
         for route in ROUTES:
-            btn = QPushButton(route.label)
+            btn = QPushButton(f" {route.label}")
+            btn.setIcon(get_icon(route.qta_icon))
+            btn.setIconSize(icon_size)
             btn.setFixedSize(*BUTTON_SIZE)
             btn.setStyleSheet(get_action_button_stylesheet())
             btn.setEnabled(route.enabled)
