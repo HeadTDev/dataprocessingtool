@@ -181,6 +181,14 @@ def run(pdf_path, excel_path, progress_callback=None, is_cancelled=None):
             progress_callback=progress_callback,
             is_cancelled=is_cancelled,
         )
+        # A read_data.csv a PDF-ből kinyert nyers céges adatokat tartalmazza -
+        # a végleges output.csv elkészülte után nem szabad megőrizni.
+        read_data_path = os.path.join(OUTPUT_DIR, "read_data.csv")
+        try:
+            if os.path.exists(read_data_path):
+                os.remove(read_data_path)
+        except Exception:
+            pass
         return {
             "cancelled": False,
             "output_csv": output_csv,

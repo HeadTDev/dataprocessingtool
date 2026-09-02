@@ -25,6 +25,8 @@ class CSVViewer(QDialog):
         QShortcut(QKeySequence.Copy, self.table, self.copy_selection)
 
         self.load_csv(csv_path)
+        # A kimutatott CSV céges adatot tartalmaz - az ablak bezárásakor a teljes
+        # tartalmazó mappát töröljük, hogy ne maradjon adat a gépen.
         self.output_dir = os.path.dirname(os.path.abspath(csv_path))
 
         # Apply dark theme

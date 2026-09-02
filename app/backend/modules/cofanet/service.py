@@ -1,5 +1,6 @@
 import csv
 import os
+import shutil
 
 from app.config.paths import module_output_dir
 from app.backend.modules.cofanet.excel_writer import fill_coface_excel_and_open
@@ -90,10 +91,17 @@ def process_cofanet_files(
             open_file=False,
         )
 
+        # A vevok.csv a SAP-ból kinyert nyers céges adatokat tartalmazza -
+        # a végleges Coface Excel elkészülte (save_path) után nem szabad megőrizni.
+        try:
+            shutil.rmtree(OUTPUT_DIR)
+        except Exception:
+            pass
+
         return {
             "cancelled": False,
             "rows_count": total_rows,
-            "vevok_csv_path": output_path,
+            "vevok_csv_path": None,
             "coface_output_path": coface_output_path,
         }
     except InterruptedError:

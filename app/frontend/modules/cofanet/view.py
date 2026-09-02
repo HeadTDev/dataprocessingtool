@@ -172,7 +172,7 @@ class CofanetHelpUI(QWidget):
         QMessageBox.information(
             self,
             "Sikeres feldolgozás",
-            f"Sikeres feldolgozás! {rows_count} vevő sor írva: output/vevok.csv\n"
+            f"Sikeres feldolgozás! {rows_count} vevő sor feldolgozva.\n"
             f"Coface Excel kitöltve: {coface_output_path}",
         )
         if coface_output_path:
