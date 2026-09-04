@@ -1,8 +1,5 @@
 import os
 import json
-import threading
-import time
-import traceback
 import urllib.request
 import urllib.error
 import shutil
@@ -22,9 +19,6 @@ VERSION_FILE = str(PROJECT_ROOT / VERSION_FILE_NAME)
 PROTECTED_UPDATE_PATHS = {VERSION_FILE_NAME, "update_log.txt", f"logs/update/{UPDATE_LOG_FILE}"}
 
 CHECK_TIMEOUT = 8
-INITIALIZE_WITHOUT_FORCE_DOWNLOAD = True  # első futásnál (nincs version.json) ne töltsön, csak inicializáljon
-
-MAX_BODY_SNIPPET = 400  # promptban ennyire vágjuk a release body-t
 
 _logger = get_logger("update")
 
@@ -254,189 +248,36 @@ def download_release_zip(
     log("Release ZIP extracted.")
 
 
-# --- Alap (headless) UI callback-ek (felülírhatóak) ---
-def _default_prompt(q: str) -> bool:
-    log(f"[PROMPT] {q} -> auto: yes")
-    return True
+def check_update_available():
+    """Checks GitHub for a newer release than what's recorded in version.json.
 
-def _default_info(m: str):
-    log(f"[INFO] {m}")
+    Runs on every app startup - no local caching/rate-limit gate. A GitHub
+    API call on each launch is cheap and well within anonymous rate limits
+    for normal desktop-app usage; a gate here previously lived in version.json
+    itself, which made it possible to silently break the update check by
+    editing/deleting that file (see git history).
 
-def _default_error(m: str):
-    log(f"[ERROR] {m}")
-
-def _default_set_version(v: str):
-    log(f"[SET_VERSION_CALLBACK] {v}")
-
-def _default_progress(label: str, current: int, total: int, done: bool):
-    if done:
-        log("[PROGRESS] done")
-        return
-    if total and total > 0:
-        log(f"[PROGRESS] {label} {current}/{total}")
-    else:
-        log(f"[PROGRESS] {label} {current}")
-
-
-def perform_update_flow(
-    incremental_preferred=True,
-    ui_prompt=_default_prompt,
-    ui_info=_default_info,
-    ui_error=_default_error,
-    ui_set_version=_default_set_version,
-    ui_progress=_default_progress,
-    run_in_thread=False,
-    delay_seconds=1.0
-):
+    If there's no local version recorded at all (missing/corrupted
+    version.json), this reports an update as available rather than silently
+    initializing the file - always going through the real, verified download
+    path instead of ever guessing that the install is already current.
     """
-    Release tag alapú frissítés.
-    """
-
-    def _work():
-        time.sleep(delay_seconds)
-        local = read_local_version_info()
-        local_tag = local.get("version") or ""
-        local_commit = local.get("commit") or ""
-        log(f"Local version tag='{local_tag}' commit='{local_commit}'")
-
-        try:
-            release = get_latest_release()
-        except Exception as e:
-            log(f"Failed to fetch the latest release: {e}")
-            ui_progress("", 0, 0, True)
-            return
-
-        remote_tag = release.get("tag_name") or ""
-        release_name = release.get("name") or remote_tag
-        release_body = release.get("body") or ""
-        if len(release_body) > MAX_BODY_SNIPPET:
-            release_body_snip = release_body[:MAX_BODY_SNIPPET].rstrip() + "..."
-        else:
-            release_body_snip = release_body
-
-        if not remote_tag:
-            log("Release has no tag_name, aborting.")
-            ui_progress("", 0, 0, True)
-            return
-
-        try:
-            remote_commit_sha = get_commit_sha_for_tag(remote_tag)
-        except Exception as e:
-            log(f"Failed to fetch commit SHA for the tag: {e}")
-            ui_progress("", 0, 0, True)
-            return
-
-        if local_tag == remote_tag:
-            log("No new release (same tag).")
-            ui_set_version(remote_tag or "ismeretlen")
-            ui_progress("", 0, 0, True)
-            return
-
-        # Első inicializáció (nincs helyi tag) – opcionálisan csak beállítjuk és nem töltünk
-        if not local_tag and INITIALIZE_WITHOUT_FORCE_DOWNLOAD:
-            write_local_version(remote_tag, remote_commit_sha)
-            ui_set_version(remote_tag)
-            log("Initialization (version.json created).")
-            return
-
-        # Van új release
-        prompt_msg = f"Új release érhető el: {remote_tag} ({release_name}). Frissíted most?"
-        if release_body_snip:
-            prompt_msg += f"\n\nVáltozások (részlet):\n{release_body_snip}"
-
-        if not ui_prompt(prompt_msg):
-            log("User declined the release update.")
-            ui_progress("", 0, 0, True)
-            return
-
-        # Próbálunk inkrementális diff-et, ha van lokális commit és engedélyezett
-        did_incremental = False
-        if incremental_preferred and local_commit:
-            try:
-                cmp_data = compare_commits(local_commit, remote_commit_sha)
-                ahead_by = cmp_data.get("ahead_by")
-                files = cmp_data.get("files", [])
-                log(f"Compare: ahead_by={ahead_by}, files={len(files)}")
-                if ahead_by and ahead_by > 0 and files:
-                    apply_incremental_update(files, remote_commit_sha, progress_cb=ui_progress)
-                    did_incremental = True
-                    log("Incremental update succeeded for the release.")
-                else:
-                    log("No diff or empty diff -> incremental update not needed.")
-                    did_incremental = True  # gyakorlatilag nincs változás
-            except Exception as e:
-                log(f"Incremental update failed: {e}")
-                log(traceback.format_exc())
-
-        # Ha nem sikerült inkrementális vagy nem preferált: teljes ZIP
-        if not did_incremental:
-            try:
-                zip_url = release.get("zipball_url")
-                if not zip_url:
-                    raise RuntimeError("Hiányzik zipball_url a release-ben.")
-                download_release_zip(zip_url, progress_cb=ui_progress)
-            except Exception as e:
-                ui_error(f"ZIP alapú frissítés sikertelen: {e}")
-                ui_progress("", 0, 0, True)
-                return
-
-        # Verzió mentése
-        write_local_version(remote_tag, remote_commit_sha)
-        ui_set_version(remote_tag)
-        ui_info(f"Frissítés kész: {remote_tag}. Indítsd újra az alkalmazást a teljes érvényesüléshez.")
-        ui_progress("", 0, 0, True)
-
-    if run_in_thread:
-        t = threading.Thread(target=_work, name="ReleaseAutoUpdaterThread", daemon=True)
-        t.start()
-    else:
-        _work()
-
-
-def set_last_checked():
-    data = safe_json_load(VERSION_FILE)
-    data["last_checked"] = datetime.now(timezone.utc).isoformat()
-    tmp = VERSION_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, VERSION_FILE)
-
-
-def check_update_available(cache_hours=1.0):
     local = read_local_version_info()
-    last_checked_str = safe_json_load(VERSION_FILE).get("last_checked", "")
     local_tag = local.get("version") or ""
-    
-    if last_checked_str:
-        try:
-            last_checked = datetime.fromisoformat(last_checked_str)
-            if (datetime.now(timezone.utc) - last_checked).total_seconds() < cache_hours * 3600:
-                log("Rate limit: not enough time has passed since the last check.")
-                return False, None
-        except Exception:
-            pass
 
     try:
         release = get_latest_release()
     except Exception as e:
         log(f"Update check error: {e}")
         return False, None
-        
+
     remote_tag = release.get("tag_name") or ""
     if not remote_tag:
-        return False, None
-        
-    if not local_tag and INITIALIZE_WITHOUT_FORCE_DOWNLOAD:
-        try:
-            remote_commit_sha = get_commit_sha_for_tag(remote_tag)
-            write_local_version(remote_tag, remote_commit_sha)
-        except Exception:
-            pass
         return False, None
 
     if local_tag != remote_tag:
         return True, release
-        
+
     return False, None
 
 

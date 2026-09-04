@@ -26,9 +26,8 @@ def main():
     splash.showMessage("Frissítések keresése...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     qt_app.processEvents()
 
-    from app.backend.services.update_service import check_update_available, set_last_checked, do_update
-    has_update, release = check_update_available(cache_hours=1.0)
-    set_last_checked()
+    from app.backend.services.update_service import check_update_available, do_update
+    has_update, release = check_update_available()
 
     if has_update:
         splash.hide()  # Splash eltüntetése, amíg dönt a felhasználó
