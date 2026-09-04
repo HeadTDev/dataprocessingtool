@@ -12,8 +12,10 @@ from PySide6.QtWidgets import (
 
 from app.backend.services.update_service import read_local_version_info
 from app.backend.services.logging_service import get_logger
+from app.frontend.components.log_viewer import LogViewer
 from app.frontend.routes import ROUTES
 from app.frontend.theme import (
+    BUTTON_HEIGHT_COMPACT,
     COLOR_BG_ELEVATED,
     COLOR_BORDER_DEFAULT,
     ICON_SIZE_INLINE,
@@ -22,6 +24,7 @@ from app.frontend.theme import (
     SPACE_3,
     SPACE_4,
     SPACE_5,
+    get_browse_button_stylesheet,
     get_dark_theme_stylesheet,
     get_icon,
     get_nav_button_stylesheet,
@@ -41,6 +44,7 @@ class MainWindow(QWidget):
         self._pages = {}
         self._nav_buttons = {}
         self._pinned_modules = []
+        self._log_viewer = None
 
         self.stack = QStackedWidget()
         sidebar = self._build_sidebar()
@@ -136,6 +140,15 @@ class MainWindow(QWidget):
         row.setContentsMargins(SPACE_5, SPACE_2, SPACE_5, SPACE_2)
         row.setSpacing(SPACE_4)
 
+        log_btn = QPushButton()
+        log_btn.setIcon(get_icon("terminal"))
+        log_btn.setIconSize(QSize(ICON_SIZE_INLINE, ICON_SIZE_INLINE))
+        log_btn.setFixedSize(BUTTON_HEIGHT_COMPACT, BUTTON_HEIGHT_COMPACT)
+        log_btn.setToolTip("Napló megnyitása")
+        log_btn.setStyleSheet(get_browse_button_stylesheet())
+        log_btn.clicked.connect(self._show_log_viewer)
+        row.addWidget(log_btn)
+
         row.addStretch()
         for route in ROUTES:
             if not route.pinned:
@@ -178,7 +191,16 @@ class MainWindow(QWidget):
         for btn in self._nav_buttons.values():
             btn.setChecked(False)
 
+    def _show_log_viewer(self):
+        if self._log_viewer is None:
+            self._log_viewer = LogViewer(self)
+        self._log_viewer.show()
+        self._log_viewer.raise_()
+        self._log_viewer.activateWindow()
+
     def closeEvent(self, event):
+        if self._log_viewer is not None:
+            self._log_viewer.close()
         for page in list(self._pages.values()) + self._pinned_modules:
             try:
                 page.close()

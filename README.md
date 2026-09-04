@@ -31,7 +31,7 @@ Requires Python 3.10+.
 
 ```bash
 pip install -r requirements.txt
-python main.py
+python main.pyw
 ```
 
 ## Building a standalone executable

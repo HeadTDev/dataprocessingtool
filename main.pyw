@@ -11,6 +11,22 @@ from app.backend.services.logging_service import get_logger
 logger = get_logger("app")
 
 
+def _log_uncaught_exception(exc_type, exc_value, exc_traceback):
+    """Safety net for .pyw (no console): without this, an exception that
+    isn't wrapped in its own try/except would only ever go to stderr, which
+    pythonw.exe silently discards - no window, no log entry, no trace of
+    what happened. Routes every otherwise-unhandled exception (including
+    ones raised inside Qt slots) into the same log the in-app log viewer
+    reads, so nothing fails completely silently."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger.opt(exception=(exc_type, exc_value, exc_traceback)).error("Uncaught exception.")
+
+
+sys.excepthook = _log_uncaught_exception
+
+
 def main():
     logger.info("Application starting.")
     qt_app = QApplication(sys.argv)

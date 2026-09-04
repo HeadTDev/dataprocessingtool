@@ -47,6 +47,6 @@ def get_logger(module_name: str):
     return _logger.bind(module=module_name)
 
 
-# Visszafelé kompatibilis, egyszerű app-szintű logger (pl. main.py indítási eseményeihez)
+# Visszafelé kompatibilis, egyszerű app-szintű logger (pl. main.pyw indítási eseményeihez)
 def configure_logging(module_name: str = "app"):
     return get_logger(module_name)
