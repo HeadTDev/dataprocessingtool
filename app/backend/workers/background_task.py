@@ -33,14 +33,12 @@ class BackgroundTask(QObject):
 
     def start(self):
         self.button.setEnabled(False)
-        self.progress_dialog = QProgressDialog(
-            "Előkészítés...", "Mégse", 0, 100, self.parent
-        )
+        self.progress_dialog = self._get_progress_dialog()
         self.progress_dialog.setWindowTitle(self.title)
-        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress_dialog.setMinimumDuration(0)
-        self.progress_dialog.setAutoClose(False)
-        self.progress_dialog.setAutoReset(False)
+        self.progress_dialog.setLabelText("Előkészítés...")
+        self.progress_dialog.setRange(0, 100)
+        self.progress_dialog.setValue(0)
+        self.progress_dialog.show()
 
         self.thread = QThread(self.parent)
         self.worker = BackgroundWorker(self.func, *self.args)
@@ -58,27 +56,56 @@ class BackgroundTask(QObject):
 
         self.thread.start()
 
+    def _get_progress_dialog(self) -> QProgressDialog:
+        """Returns a single QProgressDialog reused across every run for this
+        parent widget, instead of constructing a new WindowModal dialog each
+        time. Two independently-constructed WindowModal QProgressDialogs can
+        briefly coexist on fast, back-to-back runs (setValue() pumps the Qt
+        event loop internally, which can reenter this class mid-call) and
+        closing one while the other is mid-show can wedge Qt's internal
+        modal-window bookkeeping, freezing the whole UI. Reusing one dialog
+        object per parent makes that overlap impossible by construction.
+        """
+        dialog = getattr(self.parent, "_shared_progress_dialog", None)
+        if dialog is None:
+            dialog = QProgressDialog("", "Mégse", 0, 100, self.parent)
+            dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            dialog.setMinimumDuration(0)
+            dialog.setAutoClose(False)
+            dialog.setAutoReset(False)
+            self.parent._shared_progress_dialog = dialog
+        else:
+            try:
+                dialog.canceled.disconnect()
+            except (RuntimeError, TypeError):
+                pass  # nothing was connected
+        return dialog
+
     def cancel(self):
         if self.worker is not None:
             self.worker.request_cancel()
 
     def _on_progress(self, message: str, current: int, total: int):
-        if self.progress_dialog is None:
+        dialog = self.progress_dialog
+        if dialog is None:
             return
-        if total > 0:
-            self.progress_dialog.setRange(0, total)
-            self.progress_dialog.setValue(current)
-        else:
-            self.progress_dialog.setRange(0, 0)
-        self.progress_dialog.setLabelText(message)
+        try:
+            if total > 0:
+                dialog.setRange(0, total)
+                dialog.setValue(current)
+            else:
+                dialog.setRange(0, 0)
+            dialog.setLabelText(message)
+        except RuntimeError:
+            pass
 
     def _on_result(self, result: Any):
-        self._close_progress_dialog()
+        self._hide_progress_dialog()
         from PySide6.QtCore import QTimer
         QTimer.singleShot(100, lambda: self.on_result(result))
 
     def _on_error(self, error_message: str):
-        self._close_progress_dialog()
+        self._hide_progress_dialog()
         from PySide6.QtCore import QTimer
         QTimer.singleShot(100, lambda: self.on_error(error_message))
 
@@ -86,12 +113,16 @@ class BackgroundTask(QObject):
         self.button.setEnabled(True)
         self.thread = None
         self.worker = None
-        self._close_progress_dialog()
+        self._hide_progress_dialog()
         if self.on_finished is not None:
             self.on_finished()
 
-    def _close_progress_dialog(self):
-        if self.progress_dialog is not None:
-            self.progress_dialog.close()
-            self.progress_dialog.deleteLater()
-            self.progress_dialog = None
+    def _hide_progress_dialog(self):
+        if self.progress_dialog is None:
+            return
+        dialog = self.progress_dialog
+        self.progress_dialog = None
+        try:
+            dialog.hide()
+        except RuntimeError:
+            pass
