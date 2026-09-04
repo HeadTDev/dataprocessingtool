@@ -21,7 +21,7 @@ A fő célok:
 
 ```text
 dataprocessingtool/
-├── main.pyw
+├── main.py
 ├── README.md
 ├── requirements.txt
 ├── version.json
@@ -137,7 +137,7 @@ dataprocessingtool/
 
 | Elv | Magyarázat | Haszon |
 |---|---|---|
-| `main.pyw` legyen az egyetlen belépési pont | Innen induljon a Qt app és a főablak | Egyszerű indítás, tiszta build |
+| `main.py` legyen az egyetlen belépési pont | Innen induljon a Qt app és a főablak | Egyszerű indítás, tiszta build |
 | `frontend` csak UI-val foglalkozzon | Ablakok, gombok, dialogok, routing | Könnyebb UI módosítás |
 | `backend` csak feldolgozással foglalkozzon | PDF, Excel, CSV, fájlműveletek, üzleti logika | Tesztelhetőbb kód |
 | Modulonként azonos struktúra | Minden modulban `view.py`, `service.py`, `models.py` | Könnyebb bővítés |
@@ -155,7 +155,7 @@ dataprocessingtool/
 ### Feladatok
 
 - Új `app/` mappa létrehozása.
-- `main.pyw` létrehozása a projekt gyökerében.
+- `main.py` létrehozása a projekt gyökerében.
 - Jelenlegi `main_menu.pyw` logikájának későbbi átköltöztetése `app/frontend/main_window.py` alá.
 - `icons/` mappa megtartása gyökérszinten.
 - `theme.py`, `utils.py`, `background_worker.py`, `background_task.py` későbbi áthelyezési céljainak kijelölése.
@@ -195,7 +195,7 @@ A közös app infrastruktúra elkülönül a konkrét üzleti moduloktól.
 A jelenlegi `main_menu.pyw` helyett legyen:
 
 ```text
-main.pyw
+main.py
 app/frontend/main_window.py
 app/frontend/routes.py
 ```
@@ -456,7 +456,7 @@ Az updater közvetlenül GitHub release-ből írja felül a fájlokat. Ez műkö
 |---|---|---|
 | 1 | Új mappák létrehozása | alacsony |
 | 2 | Közös infra áthelyezése | alacsony-közepes |
-| 3 | `main.pyw` és főablak áthelyezése | közepes |
+| 3 | `main.py` és főablak áthelyezése | közepes |
 | 4 | Egy modul próba-refaktora, pl. Barcode PDF | közepes |
 | 5 | Tesztek hozzáadása az első modulhoz | alacsony |
 | 6 | Merkantil refaktor | közepes |
@@ -509,7 +509,7 @@ Ha ez stabil, ugyanazt a mintát lehet alkalmazni a többi modulra.
 
 A refaktor végére az app:
 
-- `main.pyw`-ból indul
+- `main.py`-ból indul
 - tiszta `app/frontend` és `app/backend` szerkezetet használ
 - modulonként egységes felépítésű
 - közös worker/progress rendszert használ

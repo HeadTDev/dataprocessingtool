@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 a = Analysis(  # noqa: F821  # type: ignore[name-defined]
-    ['main.pyw'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[('icons', 'icons'), ('version.json', '.')],
